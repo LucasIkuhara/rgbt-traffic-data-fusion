@@ -5,6 +5,14 @@
 \documentclass[runningheads]{llncs}
 %
 \usepackage[T1]{fontenc}
+\providecommand{\pandocbounded}[1]{#1} % Fixes images
+
+% Fix tables
+\usepackage{longtable}
+\newcounter{none}
+\usepackage{booktabs}
+
+
 % T1 fonts will be used to generate the final print and online PDFs,
 % so please use T1 fonts in your manuscript whenever possible.
 % Other font encondings may result in incorrect characters.
