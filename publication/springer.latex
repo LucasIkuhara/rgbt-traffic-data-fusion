@@ -20,8 +20,17 @@
 %
 \begin{document}
 %
-\title{Contribution Title\thanks{Supported by organization x.}}
+\title{$title$}
+\institute{$institute$}
+
+\author{$author[ \and ]$}
+
 \maketitle
+
+\begin{abstract}
+$abstract$
+\keywords{$keywords[ \and ]$}
+\end{abstract}
 
 
 $body$

@@ -1,7 +1,7 @@
 build-pub:
     docker build -t tex-env -f publication/pandoc.Dockerfile publication
 
-pub template="eisvogel": build-pub
+pub template="springer": build-pub
     @python3 publication/concat.py && \
     docker run --rm \
        --volume "$(pwd)/publication:/data" \
