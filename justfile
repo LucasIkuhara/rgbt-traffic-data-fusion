@@ -9,3 +9,7 @@ pub template="springer": build-pub
        tex-env tmp.md -o out.pdf \
        --template {{ template }} \
        --syntax-highlighting idiomatic
+
+dataset:
+    curl -L -o aau-rainsnow.zip \
+    https://www.kaggle.com/api/v1/datasets/download/aalborguniversity/aau-rainsnow
