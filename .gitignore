@@ -1,2 +1,4 @@
 publication/out.pdf
 publication/tmp.md
+**/*.DS_Store
+poetry.lock
