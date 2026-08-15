@@ -37,7 +37,6 @@ def get_rgb_detector() -> YOLO:
 
 
 if __name__ == "__main__":
-
     th = get_rgb_detector()
     results = th.predict(source="images.jpeg", conf=0.25, iou=0.45)
     print(results)
