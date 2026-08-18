@@ -1,12 +1,10 @@
+import json
 from typing import TypedDict
-
 from src.models import get_rgb_detector, get_thermal_detector
-
 from pycocotools import coco
-import numpy as np
 import skimage.io as io
-import matplotlib
-import matplotlib.pyplot as plt
+
+DATASET_PATH = "aau-rainsnow/"
 
 
 class CocoDetection(TypedDict):
@@ -16,32 +14,38 @@ class CocoDetection(TypedDict):
     score: float
 
 
-DATASET_PATH = "aau-rainsnow/"
-RGB_COCO = "aauRainSnow-rgb.json"
-rgbAnnFile = DATASET_PATH + "aauRainSnow-rgb.json"
+experiments = [
+    (DATASET_PATH + "aauRainSnow-rgb.json", get_rgb_detector(), "rgb_predictions.json")
+]
 
-rgb_model = get_rgb_detector()
-rainSnowRgbGt = coco.COCO(rgbAnnFile)
-rainSnowRgbGt.loadRes
+for dataset_path, model, output_path in experiments:
 
-for img_idx in rainSnowRgbGt.imgs:
-    img_meta = rainSnowRgbGt.imgs[img_idx]
-    img_data = io.imread(DATASET_PATH + img_meta["file_name"])
+    rainSnowRgbGt = coco.COCO(dataset_path)
+    annotations = []
 
-    # Use the first prediction
-    # as it only generates one per frame wih N boxes
-    prediction = rgb_model.predict(img_data)[0]
+    for img_idx in rainSnowRgbGt.imgs:
+        print(f"Running...\t{100*img_idx/len(rainSnowRgbGt.imgs):.2f} %")
+        img_meta = rainSnowRgbGt.imgs[img_idx]
+        img_data = io.imread(DATASET_PATH + img_meta["file_name"])
 
-    # plt.show()
+        # Use the first prediction
+        # as it only generates one per frame wih N boxes
+        prediction = model.predict(img_data)[0]
 
-    # print(img_meta)
+        for box in prediction.boxes:
+            coco_detection_ann = CocoDetection(
+                image_id=img_meta["id"],
+                bbox=box.xywh.tolist()[0],
+                category_id=float(box.cls[0]),
+                score=float(box.conf[0]),
+            )
+            print(coco_detection_ann)
+            annotations.append(coco_detection_ann)
 
-    for box in prediction.boxes:
-        coco_detection_ann = CocoDetection(
-            image_id=img_meta["id"],
-            bbox=box.xywh.tolist(),
-            category_id=box.cls,
-            score=box.conf,
-        )
-        print(coco_detection_ann, end="\n\n")
-    input()
+        if img_idx > 130:
+            break
+
+    with open(output_path, "w") as f:
+        print(f"Writing output to {f.name}...")
+        f.write(json.dumps(annotations))
+        print("Done.")
