@@ -7,3 +7,5 @@ aau-rainsnow
 yolov8n.pt
 dataset
 **/*.pyc
+**/*.jpg
+**/*.png
