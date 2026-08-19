@@ -1,10 +1,9 @@
 import json
 from typing import TypedDict
-from src.models import get_rgb_detector, get_thermal_detector
+from src.models import MODELS
 from pycocotools import coco
 import skimage.io as io
-
-DATASET_PATH = "aau-rainsnow/"
+from src.params import Experiment, params
 
 
 class CocoDetection(TypedDict):
@@ -19,20 +18,27 @@ def xywh_yolo_to_coco(v: list[float]) -> list[float]:
     return [v[0] - (v[2] / 2), v[1] - (v[3] / 2), v[2], v[3]]
 
 
-experiments = [
-    (DATASET_PATH + "aauRainSnow-rgb.json", get_rgb_detector(), "rgb_predictions.json")
-]
+for exp_id in params["experiments"]:
 
-for dataset_path, model, output_path in experiments:
-
+    # Read params and get model and dataset
+    experiment: Experiment = params["experiments"][exp_id]
+    name = experiment["name"]
+    dataset_base_dir = experiment["dataset_base_dir"]
+    dataset_path = experiment["dataset_file"]
+    model = MODELS[experiment["model_name"]]
+    output_path = experiment["output_path"]
     rainSnowRgbGt = coco.COCO(dataset_path)
+    print("Running experiment:", name)
+
     annotations = []
     gt_cat_by_name = {c["name"]: c["id"] for c in rainSnowRgbGt.dataset["categories"]}
 
     for img_idx in rainSnowRgbGt.imgs:
-        print(f"Running...\t{100*img_idx/len(rainSnowRgbGt.imgs):.2f} %")
+        print(
+            f"\nRunning...\t{100*img_idx/len(rainSnowRgbGt.imgs -1 ):.2f} %", end="\r"
+        )
         img_meta = rainSnowRgbGt.imgs[img_idx]
-        img_data = io.imread(DATASET_PATH + img_meta["file_name"])
+        img_data = io.imread(f"{dataset_base_dir}/{img_meta['file_name']}")
 
         prediction = model.predict(img_data, verbose=False)[0]
 
@@ -51,7 +57,8 @@ for dataset_path, model, output_path in experiments:
             )
             annotations.append(coco_detection_ann)
 
+    # Save results to JSON
     with open(output_path, "w") as f:
-        print(f"Writing output to {f.name}...")
+        print(f"Writing output to {f.name}...", end="\t")
         f.write(json.dumps(annotations))
         print("Done.")

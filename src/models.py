@@ -31,10 +31,15 @@ def get_rgb_detector() -> YOLO:
       The model instance
     """
     # Reference: https://huggingface.co/Ultralytics/YOLOv8
-    model = YOLO("yolov8n.pt")
+    model = YOLO("yolov8s.pt")
 
     return model
 
+
+MODELS = {
+    "rbg_yolo_v8_s": get_rgb_detector(),
+    "thermal_yolo_v8_s": get_thermal_detector(),
+}
 
 if __name__ == "__main__":
     th = get_rgb_detector()

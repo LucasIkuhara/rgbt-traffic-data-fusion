@@ -1,0 +1,13 @@
+[experiments.rgb]
+name = "rbg-yolo-v8-s"
+dataset_base_dir = "aau-rainsnow"
+dataset_file = "aau-rainsnow/aauRainSnow-rgb.json"
+model_name = "rbg_yolo_v8_s"
+output_path = "rgb_predictions.json"
+
+[experiments.thermal]
+name = "thermal-yolo-v8-s"
+dataset_base_dir = "aau-rainsnow"
+dataset_file = "aau-rainsnow/aauRainSnow-thermal.json"
+model_name = "thermal_yolo_v8_s"
+output_path = "thermal_predictions.json"
