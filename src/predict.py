@@ -34,9 +34,7 @@ for exp_id in params["experiments"]:
     gt_cat_by_name = {c["name"]: c["id"] for c in rainSnowRgbGt.dataset["categories"]}
 
     for img_idx in rainSnowRgbGt.imgs:
-        print(
-            f"\nRunning...\t{100*img_idx/len(rainSnowRgbGt.imgs -1 ):.2f} %", end="\r"
-        )
+        print(f"\nRunning...\t{100*img_idx/len(rainSnowRgbGt.imgs):.2f} %", end="\r")
         img_meta = rainSnowRgbGt.imgs[img_idx]
         img_data = io.imread(f"{dataset_base_dir}/{img_meta['file_name']}")
 
