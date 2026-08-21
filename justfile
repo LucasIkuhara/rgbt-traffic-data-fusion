@@ -13,3 +13,10 @@ pub template="springer": build-pub
 dataset:
     curl -L -o aau-rainsnow.zip \
     https://www.kaggle.com/api/v1/datasets/download/aalborguniversity/aau-rainsnow
+
+run: dataset
+    poetry run python -m src.predict
+    poetry run python -m src.evaluate >> results.txt
+
+visualize:
+    poetry run python -m src.visualize

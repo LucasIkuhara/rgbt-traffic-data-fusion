@@ -9,3 +9,5 @@ dataset
 **/*.pyc
 **/*.jpg
 **/*.png
+**/*.json
+**/*.pt
