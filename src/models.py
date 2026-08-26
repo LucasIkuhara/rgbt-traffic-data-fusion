@@ -8,15 +8,11 @@ def get_thermal_detector() -> YOLO:
     Returns:
       The model instance
     """
-    model_path = hf_hub_download(
-        repo_id="foduucom/thermal-image-object-detection", filename="best.pt"
-    )
-
-    model = YOLO(model_path)
+    model = YOLO("theramal_yolo2.pt")
 
     # set model parameters
     # Reference: https://huggingface.co/foduucom/thermal-image-object-detection
-    model.overrides["conf"] = 0.25  # NMS confidence threshold
+    model.overrides["conf"] = 0.05  # NMS confidence threshold
     model.overrides["iou"] = 0.45  # NMS IoU threshold
     model.overrides["agnostic_nms"] = False  # NMS class-agnostic
     model.overrides["max_det"] = 1000  # maximum number of detections per image
@@ -32,6 +28,7 @@ def get_rgb_detector() -> YOLO:
     """
     # Reference: https://huggingface.co/Ultralytics/YOLOv8
     model = YOLO("yolov8s.pt")
+    model.overrides["conf"] = 0.3  # NMS confidence threshold
 
     return model
 

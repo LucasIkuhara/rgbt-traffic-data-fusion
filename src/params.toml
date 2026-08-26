@@ -1,9 +1,9 @@
-[experiments.rgb]
-name = "rbg-yolo-v8-s"
-dataset_base_dir = "aau-rainsnow"
-dataset_file = "aau-rainsnow/aauRainSnow-rgb.json"
-model_name = "rbg_yolo_v8_s"
-output_path = "rgb_predictions.json"
+# [experiments.rgb]
+# name = "rbg-yolo-v8-s"
+# dataset_base_dir = "aau-rainsnow"
+# dataset_file = "aau-rainsnow/aauRainSnow-rgb.json"
+# model_name = "rbg_yolo_v8_s"
+# output_path = "rgb_predictions.json"
 
 [experiments.thermal]
 name = "thermal-yolo-v8-s"
@@ -11,3 +11,13 @@ dataset_base_dir = "aau-rainsnow"
 dataset_file = "aau-rainsnow/aauRainSnow-thermal.json"
 model_name = "thermal_yolo_v8_s"
 output_path = "thermal_predictions.json"
+
+[training]
+work_dir      = "runs/thermal_kfold"
+input_model   = "theramal_yolo2.pt"
+output_model  = "theramal_yolo_finetuned.pt"
+n_splits      = 5
+epochs        = 10
+imgsz         = 640
+batch         = 8
+freeze        = 21   # freeze backbone layers, fine-tune head only

@@ -15,8 +15,20 @@ class ExperimentList(TypedDict):
     thermal: Experiment
 
 
+class Training(TypedDict):
+    work_dir: str
+    input_model: str
+    output_model: str
+    n_splits: int
+    epochs: int
+    imgsz: int
+    batch: int
+    freeze: int
+
+
 class Params(TypedDict):
     experiments: ExperimentList
+    training: Training
 
 
 params: Params = load(open("src/params.toml", "rb"))

@@ -43,7 +43,7 @@ def main():
             img_meta = rainSnowRgbGt.imgs[img_idx]
             img_data = io.imread(f"{dataset_base_dir}/{img_meta['file_name']}")
 
-            prediction = model.predict(img_data, verbose=False)[0]
+            prediction = model.predict(img_data, verbose=False, augment=True)[0]
 
             for box in prediction.boxes:
                 # Map 0-based model class index to COCO category id via model names;
