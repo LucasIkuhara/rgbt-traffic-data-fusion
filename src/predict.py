@@ -1,9 +1,13 @@
 import json
+from pathlib import Path
 from typing import TypedDict
 from src.models import MODELS
+from src.masks import apply_mask
 from pycocotools import coco
 import skimage.io as io
 from src.params import Experiment, params
+
+DATASET_PATH = Path("aau-rainsnow")
 
 
 class CocoDetection(TypedDict):
@@ -41,7 +45,10 @@ def main():
                 f"\nRunning...\t{100*img_idx/len(rainSnowRgbGt.imgs):.2f} %", end="\r"
             )
             img_meta = rainSnowRgbGt.imgs[img_idx]
-            img_data = io.imread(f"{dataset_base_dir}/{img_meta['file_name']}")
+            file_name = img_meta["file_name"]
+            thermal = "cam2" in file_name
+            img_data = io.imread(f"{dataset_base_dir}/{file_name}")
+            img_data = apply_mask(img_data, DATASET_PATH, file_name, thermal=thermal)
 
             prediction = model.predict(img_data, verbose=False, augment=True)[0]
 
