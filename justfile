@@ -10,9 +10,19 @@ pub template="springer": build-pub
        --template {{ template }} \
        --syntax-highlighting idiomatic
 
+# Downloads and extracts the dataset (AAU RainSnow)
 dataset:
     curl -L -o aau-rainsnow.zip \
-    https://www.kaggle.com/api/v1/datasets/download/aalborguniversity/aau-rainsnow
+    https://www.kaggle.com/api/v1/datasets/download/aalborguniversity/aau-rainsnow && `\
+    unzip aau-rainsnow.zip -d aau-rainsnow && rm aau-rainsnow.zip
+
+# Downloads base YOLOv8-x weights
+get-base-weights:
+    poetry run python -c 'from ultralytics import YOLO; YOLO("yolov8x.pt")'
+
+# Fine-tunes models 
+train:
+    poetry run python -m src.train
 
 run: dataset
     poetry run python -m src.predict

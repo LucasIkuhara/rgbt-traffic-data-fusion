@@ -8,7 +8,7 @@ def get_thermal_detector() -> YOLO:
     Returns:
       The model instance
     """
-    model = YOLO("theramal_yolo2.pt")
+    model = YOLO("theramal_yolo_finetuned.pt")
 
     # set model parameters
     # Reference: https://huggingface.co/foduucom/thermal-image-object-detection
@@ -27,21 +27,21 @@ def get_rgb_detector() -> YOLO:
       The model instance
     """
     # Reference: https://huggingface.co/Ultralytics/YOLOv8
-    model = YOLO("yolov8s.pt")
+    model = YOLO("yolov8x.pt")
     model.overrides["conf"] = 0.3  # NMS confidence threshold
 
     return model
 
 
 MODELS = {
-    "rbg_yolo_v8_s": get_rgb_detector(),
-    "thermal_yolo_v8_s": get_thermal_detector(),
+    "rbg_yolo_v8_x": get_rgb_detector(),
+    "thermal_yolo_v8_x": get_thermal_detector(),
 }
 
 if __name__ == "__main__":
     th = get_rgb_detector()
-    results = th.predict(source="images.jpeg", conf=0.25, iou=0.45)
-    print(results)
-    # Process or view results natively
-    for r in results:
-        r.show()  # Opens the annotated image
+    # results = th.predict(source="https://picsum.photos/200/300", conf=0.25, iou=0.45)
+    # print(results)
+    # # Process or view results natively
+    # for r in results:
+    #     r.show()  # Opens the annotated image

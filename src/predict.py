@@ -75,4 +75,8 @@ def main():
 
 
 if __name__ == "__main__":
+    import torch
+    has_cuda_gpu = torch.cuda.is_available()
+    print(torch.cuda.get_device_name(0) if torch.cuda.is_available() else "No GPU")
+
     main()
