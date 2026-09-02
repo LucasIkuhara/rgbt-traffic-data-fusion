@@ -13,11 +13,13 @@ model_name = "thermal_yolo_v8_s"
 output_path = "thermal_predictions.json"
 
 [training]
-work_dir      = "runs/thermal_kfold"
-input_model   = "yolov8x.pt"
-output_model  = "theramal_yolo_finetuned.pt"
+work_dir           = "runs/kfold"
+input_model_rgb     = "yolov8x.pt"
+output_model_rgb    = "rgb_yolo_finetuned.pt"
+input_model_thermal = "yolov8x.pt"
+output_model_thermal = "thermal_yolo_finetuned.pt"
 n_splits      = 5
 epochs        = 10
 imgsz         = 640
 batch         = 8
-freeze        = 21   # freeze backbone layers, fine-tune head only
+freeze        = 10   # 21 = detection head only; 10 aggregation + det

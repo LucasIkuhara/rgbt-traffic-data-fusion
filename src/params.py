@@ -17,8 +17,10 @@ class ExperimentList(TypedDict):
 
 class Training(TypedDict):
     work_dir: str
-    input_model: str
-    output_model: str
+    input_model_rgb: str
+    output_model_rgb: str
+    input_model_thermal: str
+    output_model_thermal: str
     n_splits: int
     epochs: int
     imgsz: int
