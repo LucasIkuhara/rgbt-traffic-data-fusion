@@ -1,0 +1,32 @@
+
+Validating /home/lucasikuhara/code/rgbt-traffic-data-fusion/runs/kfold/fold_5/thermal/train/weights/best.pt...
+Ultralytics 8.4.138 🚀 Python-3.12.7 torch-2.13.0+cu130 CUDA:0 (NVIDIA GeForce RTX 3060, 12288MiB)
+Model summary (fused): 113 layers, 68,200,608 parameters, 0 gradients, 257.8 GFLOPs
+                 Class     Images  Instance…: 100% ━━━━━━━━━━━━ 28/28 3.4it/s 8.2s
+                   all        439       2336      0.636      0.592       0.62      0.369
+                person         74         93      0.417      0.338      0.323      0.118
+               bicycle        103        149      0.626       0.55      0.545      0.235
+                   car        381       1915      0.777      0.821      0.845      0.509
+                   bus         48         55      0.721      0.582      0.676      0.504
+                 truck         99        124       0.64      0.669       0.71      0.481
+Speed: 0.1ms preprocess, 15.0ms inference, 0.0ms loss, 1.0ms postprocess per image
+Results saved to /home/lucasikuhara/code/rgbt-traffic-data-fusion/runs/kfold/fold_5/thermal/train
+Ultralytics 8.4.138 🚀 Python-3.12.7 torch-2.13.0+cu130 CUDA:0 (NVIDIA GeForce RTX 3060, 12288MiB)
+Model summary (fused): 113 layers, 68,200,608 parameters, 0 gradients, 257.8 GFLOPs
+val: Fast image access ✅ (ping: 0.0±0.0 ms, read: 3811.4±671.1 MB/s, size: 124.1 KB)
+val: Scanning /home/lucasikuhara/code/…: 100% ━━━━━━━━━━━━ 439/439 263.0Mit/s 0.0s
+                 Class     Images  Instanc…: 100% ━━━━━━━━━━━━ 28/28 1.9it/s 14.9s
+                   all        439       2336      0.633      0.596       0.62       0.37
+Speed: 0.8ms preprocess, 29.4ms inference, 0.0ms loss, 0.8ms postprocess per image
+Results saved to /home/lucasikuhara/code/rgbt-traffic-data-fusion/runs/detect/val-15
+  [thermal] mAP50: 0.6203  mAP50-95: 0.3696  → thermal_yolo_finetuned_fold_5.pt
+
+============================================================
+  K-Fold Summary
+============================================================
+
+  [rgb] Mean mAP50: 0.6713 ± 0.0249  |  mAP50-95: 0.4724 ± 0.0187
+  [rgb] Best fold: 2 (mAP50=0.6974) → rgb_yolo_finetuned.pt
+
+  [thermal] Mean mAP50: 0.6022 ± 0.0189  |  mAP50-95: 0.3619 ± 0.0128
+  [thermal] Best fold: 5 (mAP50=0.6203) → thermal_yolo_finetuned.pt
