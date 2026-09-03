@@ -364,21 +364,21 @@ def _yolo_xywh_to_coco(v: list[float]) -> list[float]:
     return [v[0] - v[2] / 2, v[1] - v[3] / 2, v[2], v[3]]
 
 
-def _load_fold_thermal_model(fold: int) -> YOLO:
-    """Load the fine-tuned thermal weights for *fold*."""
+def _load_fold_model(fold: int, modality: str) -> YOLO:
+    """Load the fine-tuned weights for *fold* and *modality* ('rgb'|'thermal')."""
     tr = params["training"]
-    output_model = Path(tr["output_model"])
+    output_model = Path(tr[f"output_model_{modality}"])
     fold_path = output_model.with_stem(f"{output_model.stem}_fold_{fold}")
     if not fold_path.exists():
         raise FileNotFoundError(
-            f"Fine-tuned thermal model not found: {fold_path}\n"
+            f"Fine-tuned {modality} model not found: {fold_path}\n"
             "Run `python -m src.train` first."
         )
     model = YOLO(str(fold_path))
-    model.overrides["conf"]        = 0.05
-    model.overrides["iou"]         = 0.45
+    model.overrides["conf"]         = 0.05
+    model.overrides["iou"]          = 0.45
     model.overrides["agnostic_nms"] = False
-    model.overrides["max_det"]     = 1000
+    model.overrides["max_det"]      = 1000
     return model
 
 
@@ -397,14 +397,11 @@ def main() -> None:
     thermal_coco = COCO(exp_thermal["dataset_file"])
     rgb_coco     = COCO(exp_rgb["dataset_file"])
 
-    # Load the single shared RGB model
-    from src.models import get_rgb_detector
-    rgb_model = get_rgb_detector()
-
     all_results: list[dict] = []
 
     for fold in range(1, n_splits + 1):
-        thermal_model = _load_fold_thermal_model(fold)
+        thermal_model = _load_fold_model(fold, "thermal")
+        rgb_model     = _load_fold_model(fold, "rgb")
         result = evaluate_fold(
             fold=fold,
             thermal_model=thermal_model,
