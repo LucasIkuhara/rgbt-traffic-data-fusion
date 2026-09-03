@@ -40,6 +40,17 @@ from src.params import params
 DATASET_PATH = Path("aau-rainsnow")
 IMG_W, IMG_H = 640.0, 480.0
 
+# COCO-2014 annotation names that differ from YOLOv8's COCO80 class names.
+# Maps YOLO prediction name → COCO category name used in the annotation file.
+_YOLO_TO_COCO_NAME: dict[str, str] = {
+    "motorcycle":  "motorbike",
+    "airplane":    "aeroplane",
+    "couch":       "sofa",
+    "potted plant":"pottedplant",
+    "dining table":"diningtable",
+    "tv":          "tvmonitor",
+}
+
 # ---------------------------------------------------------------------------
 # Calibration helpers  (based on aauRainSnowUtility.py)
 # ---------------------------------------------------------------------------
@@ -213,7 +224,8 @@ def _run_model_on_images(
 
         for box in prediction.boxes:
             cls_name = model.names[int(box.cls[0])]
-            cat_id   = gt_cat_by_name.get(cls_name)
+            coco_name = _YOLO_TO_COCO_NAME.get(cls_name, cls_name)
+            cat_id   = gt_cat_by_name.get(coco_name)
             if cat_id is None:
                 continue
 
