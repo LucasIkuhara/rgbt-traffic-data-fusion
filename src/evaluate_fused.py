@@ -143,11 +143,11 @@ def _transform_bbox_rgb_to_thermal(
 # ---------------------------------------------------------------------------
 
 def load_fold_image_ids(fold: int) -> list[int]:
-    """Return thermal val image IDs for *fold* by reading val_images.txt."""
+    """Return thermal val image IDs for *fold* by reading val_images_thermal.txt."""
     tr  = params["training"]
     exp = params["experiments"]["thermal"]
 
-    val_txt = Path(tr["work_dir"]) / f"fold_{fold}" / "val_images.txt"
+    val_txt = Path(tr["work_dir"]) / f"fold_{fold}" / "val_images_thermal.txt"
     thermal_coco = COCO(exp["dataset_file"])
 
     fname_to_id = {
@@ -165,9 +165,6 @@ def load_fold_image_ids(fold: int) -> list[int]:
     return image_ids
 
 
-# ---------------------------------------------------------------------------
-# Per-fold evaluation
-# ---------------------------------------------------------------------------
 
 def _run_model_on_images(
     model: YOLO,
