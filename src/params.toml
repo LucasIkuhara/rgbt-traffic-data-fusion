@@ -13,8 +13,8 @@ model_name = "thermal_yolo_v8_s"
 output_path = "thermal_predictions.json"
 
 [inference]
-conf_rgb     = 0.05
-conf_thermal = 0.05
+conf_rgb     = 0.001
+conf_thermal = 0.001
 iou_rgb      = 0.45
 iou_thermal  = 0.45
 wbf_iou_thr  = 0.55

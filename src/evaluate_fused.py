@@ -150,6 +150,26 @@ def _transform_bbox_rgb_to_thermal(
 
 
 # ---------------------------------------------------------------------------
+# COCO annotation cleaner
+# ---------------------------------------------------------------------------
+
+def _remove_degenerate_annotations(coco: COCO) -> None:
+    """Remove annotations with empty segmentation (area=0, invalid bbox).
+
+    These are present in the aauRainSnow dataset and are skipped during
+    training (write_labels guards on segmentation), but COCOeval counts them
+    as ground-truth misses if left in, artificially suppressing recall/AP.
+    Mutates the COCO object in-place and rebuilds its index.
+    """
+    valid = [a for a in coco.dataset["annotations"] if a.get("segmentation")]
+    removed = len(coco.dataset["annotations"]) - len(valid)
+    if removed:
+        print(f"  [coco_clean] removed {removed} degenerate annotations (no segmentation)")
+    coco.dataset["annotations"] = valid
+    coco.createIndex()
+
+
+# ---------------------------------------------------------------------------
 # Fold image-ID loader  (unchanged from the original scaffold)
 # ---------------------------------------------------------------------------
 
@@ -267,7 +287,8 @@ def _coco_eval(
 
     res    = gt_coco.loadRes(detections)
     ev     = COCOeval(gt_coco, res, "bbox")
-    ev.params.imgIds = image_ids
+    ev.params.imgIds  = image_ids
+    ev.params.maxDets = [1, 10, 1000]   # match YOLO's max_det=1000; default [1,10,100] truncates at low conf
     ev.evaluate()
     ev.accumulate()
     print(f"\n  ── {label} ──")
@@ -402,9 +423,12 @@ def main() -> None:
 
     n_splits = tr["n_splits"]
 
-    # Load GT annotation sets once
+    # Load GT annotation sets once; strip degenerate annotations that are
+    # absent from training labels but would otherwise count as GT misses.
     thermal_coco = COCO(exp_thermal["dataset_file"])
     rgb_coco     = COCO(exp_rgb["dataset_file"])
+    _remove_degenerate_annotations(thermal_coco)
+    _remove_degenerate_annotations(rgb_coco)
 
     all_results: list[dict] = []
     print("PARAMS USED:", params["inference"])
