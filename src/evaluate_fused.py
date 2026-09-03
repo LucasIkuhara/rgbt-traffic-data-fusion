@@ -395,6 +395,7 @@ def main() -> None:
     rgb_coco     = COCO(exp_rgb["dataset_file"])
 
     all_results: list[dict] = []
+    print("PARAMS USED:", params["inference"])
 
     for fold in range(1, n_splits + 1):
         thermal_model = _load_fold_model(fold, "thermal")
