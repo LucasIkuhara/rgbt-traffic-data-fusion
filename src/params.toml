@@ -12,6 +12,13 @@ dataset_file = "aau-rainsnow/aauRainSnow-thermal.json"
 model_name = "thermal_yolo_v8_s"
 output_path = "thermal_predictions.json"
 
+[inference]
+conf_rgb     = 0.05
+iou_rgb      = 0.45
+conf_thermal = 0.05
+iou_thermal  = 0.45
+wbf_iou_thr  = 0.55
+
 [training]
 work_dir           = "runs/kfold"
 input_model_rgb     = "yolov8x.pt"

@@ -39,7 +39,6 @@ from src.params import params
 
 DATASET_PATH = Path("aau-rainsnow")
 IMG_W, IMG_H = 640.0, 480.0
-WBF_IOU_THR = 0.55
 
 # ---------------------------------------------------------------------------
 # Calibration helpers  (based on aauRainSnowUtility.py)
@@ -338,7 +337,7 @@ def evaluate_fold(
             thermal_detections=thermal_by_img.get(img_id, []),
             img_w=IMG_W,
             img_h=IMG_H,
-            iou_thr=WBF_IOU_THR,
+            iou_thr=params["inference"]["wbf_iou_thr"],
         )
         fused_dets.extend(fused)
 
@@ -374,9 +373,10 @@ def _load_fold_model(fold: int, modality: str) -> YOLO:
             f"Fine-tuned {modality} model not found: {fold_path}\n"
             "Run `python -m src.train` first."
         )
+    inf = params["inference"]
     model = YOLO(str(fold_path))
-    model.overrides["conf"]         = 0.05
-    model.overrides["iou"]          = 0.45
+    model.overrides["conf"]         = inf[f"conf_{modality}"]
+    model.overrides["iou"]          = inf[f"iou_{modality}"]
     model.overrides["agnostic_nms"] = False
     model.overrides["max_det"]      = 1000
     return model

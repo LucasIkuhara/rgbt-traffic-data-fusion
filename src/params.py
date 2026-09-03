@@ -15,6 +15,14 @@ class ExperimentList(TypedDict):
     thermal: Experiment
 
 
+class Inference(TypedDict):
+    conf_rgb: float
+    iou_rgb: float
+    conf_thermal: float
+    iou_thermal: float
+    wbf_iou_thr: float
+
+
 class Training(TypedDict):
     work_dir: str
     input_model_rgb: str
@@ -30,6 +38,7 @@ class Training(TypedDict):
 
 class Params(TypedDict):
     experiments: ExperimentList
+    inference: Inference
     training: Training
 
 
