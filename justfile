@@ -24,6 +24,10 @@ get-base-weights:
 train:
     poetry run python -m src.train
 
+# Evaluate models and fused results based on validation sets
+eval:
+    poetry run python -m src.evaluate_fused
+
 run: dataset
     poetry run python -m src.predict
     poetry run python -m src.evaluate >> results.txt
