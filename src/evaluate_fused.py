@@ -313,7 +313,7 @@ def _coco_eval(
     res    = gt_coco.loadRes(detections)
     ev     = COCOeval(gt_coco, res, "bbox")
     ev.params.imgIds  = image_ids
-    ev.params.maxDets = [1, 10, 1000]   # match YOLO's max_det=1000; default [1,10,100] truncates at low conf
+    ev.params.maxDets = [1, 10, 100, 1000]  # 1000 matches YOLO's max_det; 100 kept so _summarize(default) stays valid
     ev.evaluate()
     ev.accumulate()
     print(f"\n  ── {label} ──")
