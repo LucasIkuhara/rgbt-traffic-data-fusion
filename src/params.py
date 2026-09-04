@@ -21,6 +21,7 @@ class Inference(TypedDict):
     conf_thermal: float
     iou_thermal: float
     wbf_iou_thr: float
+    gt_bbox_source: str   # "rle" | "json"
 
 
 class Training(TypedDict):
