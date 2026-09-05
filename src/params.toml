@@ -29,7 +29,7 @@ output_model_rgb    = "rgb_yolo_finetuned.pt"
 input_model_thermal = "yolov8x.pt"
 output_model_thermal = "thermal_yolo_finetuned.pt"
 n_splits      = 5
-epochs        = 10
+epochs        = 50
 imgsz         = 640
 batch         = 8
 freeze        = 10   # 21 = detection head only; 10 aggregation + det
