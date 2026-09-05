@@ -308,7 +308,7 @@ def _coco_eval(
     """Run COCOeval on *detections* restricted to *image_ids*."""
     if not detections:
         print(f"  [{label}] No detections — skipping eval.")
-        return {"map50": 0.0, "map50_95": 0.0}
+        return {"map50": 0.0, "map50_95": 0.0, "recall": 0.0}
 
     res    = gt_coco.loadRes(detections)
     ev     = COCOeval(gt_coco, res, "bbox")
@@ -320,8 +320,9 @@ def _coco_eval(
     ev.summarize()
 
     return {
-        "map50":    float(ev.stats[1]),   # AP @ IoU=0.50
-        "map50_95": float(ev.stats[0]),   # AP @ IoU=0.50:0.95
+        "map50":    float(ev.stats[1]),   # AP  @ IoU=0.50
+        "map50_95": float(ev.stats[0]),   # AP  @ IoU=0.50:0.95
+        "recall":   float(ev.stats[8]),   # AR  @ IoU=0.50:0.95, maxDets=1000
     }
 
 
@@ -375,8 +376,8 @@ def evaluate_fold(
         modality="rgb",
     )
 
-    # ── WBF fusion ───────────────────────────────────────────────────────
-    print("  Fusing with WBF …")
+    # ── Fuse with all methods ─────────────────────────────────────────────
+    print("  Fusing detections …")
     thermal_by_img: dict[int, list[CocoDetection]] = defaultdict(list)
     for d in thermal_dets:
         thermal_by_img[d["image_id"]].append(d)
@@ -385,27 +386,39 @@ def evaluate_fold(
     for d in rgb_proj_dets:
         rgb_by_img[d["image_id"]].append(d)
 
-    fused_dets: list[CocoDetection] = []
-    for img_id in image_ids:
-        fused = fuse_detections(
-            rgb_detections=rgb_by_img.get(img_id, []),
-            thermal_detections=thermal_by_img.get(img_id, []),
-            img_w=IMG_W,
-            img_h=IMG_H,
-            iou_thr=params["inference"]["wbf_iou_thr"],
-        )
-        fused_dets.extend(fused)
+    inf = params["inference"]
+    fusion_methods = ("wbf", "nms", "soft_nms", "nmw")
+    fused_by_method: dict[str, list[CocoDetection]] = {}
+
+    for method in fusion_methods:
+        dets: list[CocoDetection] = []
+        for img_id in image_ids:
+            dets.extend(fuse_detections(
+                rgb_detections=rgb_by_img.get(img_id, []),
+                thermal_detections=thermal_by_img.get(img_id, []),
+                img_w=IMG_W,
+                img_h=IMG_H,
+                iou_thr=inf["wbf_iou_thr"],
+                method=method,
+                soft_nms_sigma=inf["soft_nms_sigma"],
+                soft_nms_thresh=inf["soft_nms_thresh"],
+            ))
+        fused_by_method[method] = dets
 
     # ── COCO evaluation ──────────────────────────────────────────────────
-    m_thermal = _coco_eval(thermal_coco, thermal_dets,   image_ids, f"Fold {fold} – Thermal")
-    m_rgb     = _coco_eval(thermal_coco, rgb_proj_dets,  image_ids, f"Fold {fold} – RGB→Thermal")
-    m_fused   = _coco_eval(thermal_coco, fused_dets,     image_ids, f"Fold {fold} – Fused (WBF)")
+    m_thermal = _coco_eval(thermal_coco, thermal_dets,  image_ids, f"Fold {fold} – Thermal")
+    m_rgb     = _coco_eval(thermal_coco, rgb_proj_dets, image_ids, f"Fold {fold} – RGB→Thermal")
+    m_fused   = {
+        method: _coco_eval(thermal_coco, fused_by_method[method], image_ids,
+                           f"Fold {fold} – Fused ({method.upper()})")
+        for method in fusion_methods
+    }
 
     return {
         "fold":    fold,
         "thermal": m_thermal,
         "rgb":     m_rgb,
-        "fused":   m_fused,
+        "fused":   m_fused,   # dict keyed by method name
     }
 
 
@@ -416,6 +429,40 @@ def evaluate_fold(
 def _yolo_xywh_to_coco(v: list[float]) -> list[float]:
     """YOLO centre-xywh (pixel) → COCO top-left-xywh (pixel)."""
     return [v[0] - v[2] / 2, v[1] - v[3] / 2, v[2], v[3]]
+
+
+def _export_results(all_results: list[dict], path: str = "results.xlsx") -> None:
+    """Aggregate fold results into a DataFrame and export to Excel.
+
+    Each row is one configuration (Thermal, RGB→Thermal, or a fusion method).
+    Columns: mAP@50 mean±std, mAP@[0.5:0.95] mean±std, Recall mean±std.
+    """
+    import pandas as pd
+
+    fusion_methods = ("wbf", "nms", "soft_nms", "nmw")
+    metrics = ("map50", "map50_95", "recall")
+
+    # Collect all configurations
+    configs: list[tuple[str, list[dict]]] = [
+        ("Thermal",     [r["thermal"]         for r in all_results]),
+        ("RGB→Thermal", [r["rgb"]             for r in all_results]),
+    ]
+    for method in fusion_methods:
+        configs.append((f"Fused ({method.upper()})", [r["fused"][method] for r in all_results]))
+
+    rows = []
+    for name, fold_metrics in configs:
+        row: dict = {"Configuration": name}
+        for metric in metrics:
+            values = np.array([m[metric] for m in fold_metrics])
+            col_label = {"map50": "mAP@50", "map50_95": "mAP@[0.5:0.95]", "recall": "Recall"}[metric]
+            row[f"{col_label} Mean"] = round(float(values.mean()), 4)
+            row[f"{col_label} Std"]  = round(float(values.std()),  4)
+        rows.append(row)
+
+    df = pd.DataFrame(rows)
+    df.to_excel(path, index=False)
+    print(f"\n  [export] Results written to {path}")
 
 
 def _load_fold_model(fold: int, modality: str) -> YOLO:
@@ -477,33 +524,56 @@ def main() -> None:
         all_results.append(result)
 
     # ── Summary table ────────────────────────────────────────────────────
-    print(f"\n\n{'='*70}")
-    print("  SUMMARY  (mAP50  |  mAP50-95)")
-    print(f"{'='*70}")
-    header = f"  {'Fold':>6}  {'Thermal mAP50':>14}  {'Thermal mAP':>11}  "
-    header += f"{'RGB mAP50':>10}  {'RGB mAP':>8}  "
-    header += f"{'Fused mAP50':>12}  {'Fused mAP':>10}"
-    print(header)
-    print(f"  {'-'*64}")
+    fusion_methods = ("wbf", "nms", "soft_nms", "nmw")
+
+    def _mean(key, subkey, method=None):
+        if method is None:
+            return np.mean([r[key][subkey] for r in all_results])
+        return np.mean([r[key][method][subkey] for r in all_results])
+
+    # Per-modality block (Thermal + RGB)
+    print(f"\n\n{'='*60}")
+    print("  SUMMARY — Thermal & RGB  (mAP50  |  mAP50-95)")
+    print(f"{'='*60}")
+    print(f"  {'Fold':>6}  {'Thermal mAP50':>14}  {'Thermal mAP':>11}  {'RGB mAP50':>10}  {'RGB mAP':>8}")
+    print(f"  {'-'*56}")
     for r in all_results:
         print(
             f"  {r['fold']:>6}  "
             f"{r['thermal']['map50']:>14.4f}  {r['thermal']['map50_95']:>11.4f}  "
-            f"{r['rgb']['map50']:>10.4f}  {r['rgb']['map50_95']:>8.4f}  "
-            f"{r['fused']['map50']:>12.4f}  {r['fused']['map50_95']:>10.4f}"
+            f"{r['rgb']['map50']:>10.4f}  {r['rgb']['map50_95']:>8.4f}"
         )
-
-    def _mean(key, subkey):
-        return np.mean([r[key][subkey] for r in all_results])
-
-    print(f"  {'-'*64}")
+    print(f"  {'-'*56}")
     print(
         f"  {'Mean':>6}  "
         f"{_mean('thermal','map50'):>14.4f}  {_mean('thermal','map50_95'):>11.4f}  "
-        f"{_mean('rgb','map50'):>10.4f}  {_mean('rgb','map50_95'):>8.4f}  "
-        f"{_mean('fused','map50'):>12.4f}  {_mean('fused','map50_95'):>10.4f}"
+        f"{_mean('rgb','map50'):>10.4f}  {_mean('rgb','map50_95'):>8.4f}"
     )
-    print(f"{'='*70}\n")
+    print(f"{'='*60}")
+
+    # Per-fusion-method block
+    for method in fusion_methods:
+        print(f"\n\n{'='*60}")
+        print(f"  SUMMARY — Fused ({method.upper()})  (mAP50  |  mAP50-95)")
+        print(f"{'='*60}")
+        print(f"  {'Fold':>6}  {'mAP50':>10}  {'mAP50-95':>10}")
+        print(f"  {'-'*30}")
+        for r in all_results:
+            print(
+                f"  {r['fold']:>6}  "
+                f"{r['fused'][method]['map50']:>10.4f}  "
+                f"{r['fused'][method]['map50_95']:>10.4f}"
+            )
+        print(f"  {'-'*30}")
+        print(
+            f"  {'Mean':>6}  "
+            f"{_mean('fused','map50',method):>10.4f}  "
+            f"{_mean('fused','map50_95',method):>10.4f}"
+        )
+        print(f"{'='*60}")
+    print()
+
+    _export_results(all_results)
 
 
 if __name__ == "__main__":

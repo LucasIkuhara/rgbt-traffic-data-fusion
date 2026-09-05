@@ -18,7 +18,9 @@ conf_thermal = 0.001
 iou_rgb      = 0.45
 iou_thermal  = 0.45
 wbf_iou_thr  = 0.55
-gt_bbox_source = "rle"   # "rle" = derive from segmentation mask; "json" = use stored ann["bbox"]
+gt_bbox_source  = "rle"  # "rle" = derive from segmentation mask; "json" = use stored ann["bbox"]
+soft_nms_sigma  = 0.5    # Soft-NMS gaussian sigma
+soft_nms_thresh = 0.001  # Soft-NMS score threshold
 
 [training]
 work_dir           = "runs/kfold"
