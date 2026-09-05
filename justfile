@@ -28,7 +28,11 @@ train:
 eval:
     poetry run python -m src.evaluate_fused
 
-run: dataset
+# Reproduce entire experiment
+run: 
+    dataset
+    get-base-weights
+    train
     poetry run python -m src.predict
     poetry run python -m src.evaluate >> results.txt
 
