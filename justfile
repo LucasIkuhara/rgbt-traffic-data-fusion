@@ -13,7 +13,7 @@ pub template="springer": build-pub
 # Downloads and extracts the dataset (AAU RainSnow)
 dataset:
     curl -L -o aau-rainsnow.zip \
-    https://www.kaggle.com/api/v1/datasets/download/aalborguniversity/aau-rainsnow && `\
+    https://www.kaggle.com/api/v1/datasets/download/aalborguniversity/aau-rainsnow && \
     unzip aau-rainsnow.zip -d aau-rainsnow && rm aau-rainsnow.zip
 
 # Downloads base YOLOv8-x weights
@@ -29,10 +29,7 @@ eval:
     poetry run python -m src.evaluate_fused
 
 # Reproduce entire experiment
-run: 
-    dataset
-    get-base-weights
-    train
+run: dataset get-base-weights train
     poetry run python -m src.predict
     poetry run python -m src.evaluate >> results.txt
 
