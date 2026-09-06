@@ -12,3 +12,4 @@ dataset
 **/*.json
 **/*.pt
 runs
+src/.env
