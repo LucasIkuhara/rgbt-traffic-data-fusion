@@ -157,12 +157,16 @@ def fuse_detections(
         if not boxes_list:
             continue
 
+        # Trim weights to match the number of models that actually contributed
+        # boxes for this category; ensemble-boxes rejects a mismatched list.
+        effective_weights = weights[: len(boxes_list)]
+
         if method == "wbf":
             fused_boxes, fused_scores, fused_labels = weighted_boxes_fusion(
                 boxes_list,
                 scores_list,
                 labels_list,
-                weights=weights,
+                weights=effective_weights,
                 iou_thr=iou_thr,
                 skip_box_thr=skip_box_thr,
             )
@@ -172,7 +176,7 @@ def fuse_detections(
                 scores_list,
                 labels_list,
                 iou_thr=iou_thr,
-                weights=weights,
+                weights=effective_weights,
             )
         elif method == "soft_nms":
             fused_boxes, fused_scores, fused_labels = soft_nms(
@@ -182,14 +186,14 @@ def fuse_detections(
                 iou_thr=iou_thr,
                 sigma=soft_nms_sigma,
                 thresh=soft_nms_thresh,
-                weights=weights,
+                weights=effective_weights,
             )
         elif method == "nmw":
             fused_boxes, fused_scores, fused_labels = non_maximum_weighted(
                 boxes_list,
                 scores_list,
                 labels_list,
-                weights=weights,
+                weights=effective_weights,
                 iou_thr=iou_thr,
                 skip_box_thr=skip_box_thr,
             )
