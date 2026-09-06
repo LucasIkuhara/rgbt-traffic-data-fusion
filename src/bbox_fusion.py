@@ -171,32 +171,43 @@ def fuse_detections(
                 skip_box_thr=skip_box_thr,
             )
         elif method == "nms":
-            fused_boxes, fused_scores, fused_labels = nms(
-                boxes_list,
-                scores_list,
-                labels_list,
-                iou_thr=iou_thr,
-                weights=effective_weights,
-            )
+            try:
+                fused_boxes, fused_scores, fused_labels = nms(
+                    boxes_list,
+                    scores_list,
+                    labels_list,
+                    iou_thr=iou_thr,
+                    weights=effective_weights,
+                )
+            except ValueError:
+                # ensemble_boxes crashes with np.concatenate on an empty list
+                # when all boxes are removed (e.g. zero-area boxes).
+                continue
         elif method == "soft_nms":
-            fused_boxes, fused_scores, fused_labels = soft_nms(
-                boxes_list,
-                scores_list,
-                labels_list,
-                iou_thr=iou_thr,
-                sigma=soft_nms_sigma,
-                thresh=soft_nms_thresh,
-                weights=effective_weights,
-            )
+            try:
+                fused_boxes, fused_scores, fused_labels = soft_nms(
+                    boxes_list,
+                    scores_list,
+                    labels_list,
+                    iou_thr=iou_thr,
+                    sigma=soft_nms_sigma,
+                    thresh=soft_nms_thresh,
+                    weights=effective_weights,
+                )
+            except ValueError:
+                continue
         elif method == "nmw":
-            fused_boxes, fused_scores, fused_labels = non_maximum_weighted(
-                boxes_list,
-                scores_list,
-                labels_list,
-                weights=effective_weights,
-                iou_thr=iou_thr,
-                skip_box_thr=skip_box_thr,
-            )
+            try:
+                fused_boxes, fused_scores, fused_labels = non_maximum_weighted(
+                    boxes_list,
+                    scores_list,
+                    labels_list,
+                    weights=effective_weights,
+                    iou_thr=iou_thr,
+                    skip_box_thr=skip_box_thr,
+                )
+            except ValueError:
+                continue
         else:
             raise ValueError(
                 f"Unknown fusion method {method!r}. "
