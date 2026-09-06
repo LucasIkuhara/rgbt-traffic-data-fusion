@@ -1,5 +1,6 @@
 from huggingface_hub import hf_hub_download
 from ultralytics import YOLO
+from src.params import params
 
 
 def get_thermal_detector() -> YOLO:
@@ -8,7 +9,7 @@ def get_thermal_detector() -> YOLO:
     Returns:
       The model instance
     """
-    model = YOLO("theramal_yolo_finetuned.pt")
+    model = YOLO(params["training"]["output_model_thermal"])
 
     # set model parameters
     # Reference: https://huggingface.co/foduucom/thermal-image-object-detection
@@ -27,7 +28,7 @@ def get_rgb_detector() -> YOLO:
       The model instance
     """
     # Reference: https://huggingface.co/Ultralytics/YOLOv8
-    model = YOLO("yolov8x.pt")
+    model = YOLO(params["training"]["output_model_rgb"])
     model.overrides["conf"] = 0.3  # NMS confidence threshold
 
     return model
