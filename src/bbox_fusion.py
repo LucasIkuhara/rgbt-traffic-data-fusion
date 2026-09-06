@@ -146,13 +146,15 @@ def fuse_detections(
         labels_list: list[list[int]]         = []
 
         for dets in (rgb_cat, ther_cat):
+            if not dets:
+                continue
             boxes_list.append([
                 _coco_to_norm_xyxy(d["bbox"], img_w, img_h) for d in dets
             ])
             scores_list.append([d["score"] for d in dets])
             labels_list.append([d["category_id"] for d in dets])
 
-        if not any(boxes_list):
+        if not boxes_list:
             continue
 
         if method == "wbf":
