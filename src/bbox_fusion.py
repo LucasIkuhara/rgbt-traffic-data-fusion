@@ -334,7 +334,7 @@ if __name__ == "__main__":
         rgb_path=rgb_path,
         thermal_path=thermal_path,
         output_path=output_path,
-        iou_thr=inf["wbf_iou_thr"],
+        iou_thr=inf["fusion_iou_thr"],
         method=inf["fusion_method"],
         soft_nms_sigma=inf.get("soft_nms_sigma", 0.5),
         soft_nms_thresh=inf.get("soft_nms_thresh", 0.001),

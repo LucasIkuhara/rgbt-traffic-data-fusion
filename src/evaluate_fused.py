@@ -398,7 +398,7 @@ def evaluate_fold(
                 thermal_detections=thermal_by_img.get(img_id, []),
                 img_w=IMG_W,
                 img_h=IMG_H,
-                iou_thr=inf["wbf_iou_thr"],
+                iou_thr=inf["fusion_iou_thr"],
                 method=method,
                 soft_nms_sigma=inf["soft_nms_sigma"],
                 soft_nms_thresh=inf["soft_nms_thresh"],
