@@ -398,9 +398,23 @@ def _coco_eval_per_class(
         ev.params.maxDets = [1, 10, 100, 1000]
         ev.evaluate()
         ev.accumulate()
+        # Read AP directly from ev.eval["precision"] rather than ev.stats,
+        # which requires summarize() to be called first.
+        # precision shape: [T, R, K, A, M]
+        #   T: IoU thresholds (index 0 = 0.50, indices 0..9 = 0.50..0.95)
+        #   R: recall points (101)
+        #   K: categories (1 here)
+        #   A: area ranges (index 0 = all)
+        #   M: maxDet thresholds (index -1 = largest)
+        prec = ev.eval["precision"][:, :, 0, 0, -1]  # [T, R]
+        valid = prec[prec > -1]
+        map50_95 = float(np.mean(valid)) if valid.size > 0 else 0.0
+        prec50 = prec[0]  # IoU=0.50, shape [R]
+        valid50 = prec50[prec50 > -1]
+        map50 = float(np.mean(valid50)) if valid50.size > 0 else 0.0
         results[cat_name] = {
-            "map50":    float(ev.stats[1]),
-            "map50_95": float(ev.stats[0]),
+            "map50":    map50,
+            "map50_95": map50_95,
             "f1":       _f1_from_eval_single_cat(ev),
         }
 
