@@ -39,10 +39,3 @@ MODELS = {
     "thermal_yolo_v8_x": get_thermal_detector(),
 }
 
-if __name__ == "__main__":
-    th = get_rgb_detector()
-    # results = th.predict(source="https://picsum.photos/200/300", conf=0.25, iou=0.45)
-    # print(results)
-    # # Process or view results natively
-    # for r in results:
-    #     r.show()  # Opens the annotated image

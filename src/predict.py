@@ -1,6 +1,6 @@
 import json
 from pathlib import Path
-from typing import TypedDict
+from src.bbox_fusion import CocoDetection
 from src.models import MODELS
 from src.masks import apply_mask
 from pycocotools import coco
@@ -8,13 +8,6 @@ import skimage.io as io
 from src.params import Experiment, params
 
 DATASET_PATH = Path("aau-rainsnow")
-
-
-class CocoDetection(TypedDict):
-    image_id: str
-    category_id: int
-    bbox: list
-    score: float
 
 
 # YOLO xywh (centre-based) to COCO xywh (top-left-based)
