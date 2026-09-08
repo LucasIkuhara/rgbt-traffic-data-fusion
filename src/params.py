@@ -21,9 +21,16 @@ class Inference(TypedDict):
     conf_thermal: float
     iou_thermal: float
     fusion_iou_thr: float
-    gt_bbox_source: str   # "rle" | "json"
     soft_nms_sigma: float
     soft_nms_thresh: float
+
+
+class PreProcessing(TypedDict):
+    input_rgb_ann:      str        # raw RGB annotation JSON
+    input_thermal_ann:  str        # raw thermal annotation JSON
+    output_rgb_ann:     str        # cleaned RGB annotation JSON (output)
+    output_thermal_ann: str        # cleaned thermal annotation JSON (output)
+    filter_categories:  list[str]  # remove annotations with these category names
 
 
 class Training(TypedDict):
@@ -40,9 +47,10 @@ class Training(TypedDict):
 
 
 class Params(TypedDict):
-    experiments: ExperimentList
-    inference: Inference
-    training: Training
+    experiments:    ExperimentList
+    preprocessing:  PreProcessing
+    inference:      Inference
+    training:       Training
 
 
 params: Params = load(open("src/params.toml", "rb"))

@@ -1,16 +1,29 @@
 [experiments.rgb]
 name = "rbg-yolo-v8-s"
 dataset_base_dir = "aau-rainsnow"
-dataset_file = "aau-rainsnow/aauRainSnow-rgb.json"
+dataset_file = "aau-rainsnow/aauRainSnow-rgb-cleaned.json"
 model_name = "rbg_yolo_v8_x"
 output_path = "rgb_predictions.json"
 
 [experiments.thermal]
 name = "thermal-yolo-v8-x"
 dataset_base_dir = "aau-rainsnow"
-dataset_file = "aau-rainsnow/aauRainSnow-thermal.json"
+dataset_file = "aau-rainsnow/aauRainSnow-thermal-cleaned.json"
 model_name = "thermal_yolo_v8_s"
 output_path = "thermal_predictions.json"
+
+[preprocessing]
+# Input annotation files (raw, before cleaning)
+input_rgb_ann     = "aau-rainsnow/aauRainSnow-rgb.json"
+input_thermal_ann = "aau-rainsnow/aauRainSnow-thermal.json"
+
+# Output cleaned annotation files (written by pre_processing.py)
+output_rgb_ann     = "aau-rainsnow/aauRainSnow-rgb-cleaned.json"
+output_thermal_ann = "aau-rainsnow/aauRainSnow-thermal-cleaned.json"
+
+# Remove annotations whose category name is in this list.
+# All other annotations and category entries are kept.
+filter_categories = ["bicycle", "person"]
 
 [inference]
 conf_rgb     = 0.001
@@ -18,16 +31,15 @@ conf_thermal = 0.001
 iou_rgb      = 0.45
 iou_thermal  = 0.45
 fusion_iou_thr  = 0.55
-gt_bbox_source  = "rle"  # "rle" = derive from segmentation mask; "json" = use stored ann["bbox"]
 soft_nms_sigma  = 0.5    # Soft-NMS gaussian sigma
 soft_nms_thresh = 0.001  # Soft-NMS score threshold
 
 [training]
 work_dir           = "runs/kfold"
 input_model_rgb     = "yolov8x.pt"
-output_model_rgb    = "rgb_yolo_finetuned.pt"
+output_model_rgb    = "weights/rgb_yolo_finetuned.pt"
 input_model_thermal = "yolov8x.pt"
-output_model_thermal = "thermal_yolo_finetuned.pt"
+output_model_thermal = "weights/thermal_yolo_finetuned.pt"
 n_splits      = 5
 epochs        = 50
 imgsz         = 640

@@ -150,52 +150,7 @@ def _transform_bbox_rgb_to_thermal(
 
 
 # ---------------------------------------------------------------------------
-# COCO annotation cleaner
-# ---------------------------------------------------------------------------
-
-def _remove_degenerate_annotations(coco: COCO) -> None:
-    """Remove annotations with empty segmentation (area=0, invalid bbox).
-
-    These are present in the aauRainSnow dataset and are skipped during
-    training (write_labels guards on segmentation), but COCOeval counts them
-    as ground-truth misses if left in, artificially suppressing recall/AP.
-    Mutates the COCO object in-place and rebuilds its index.
-    """
-    valid = [a for a in coco.dataset["annotations"] if a.get("segmentation")]
-    removed = len(coco.dataset["annotations"]) - len(valid)
-    if removed:
-        print(f"  [coco_clean] removed {removed} degenerate annotations (no segmentation)")
-    coco.dataset["annotations"] = valid
-    coco.createIndex()
-
-
-def _realign_gt_bboxes_to_rle(coco: COCO) -> None:
-    """Replace each annotation's stored bbox with the one derived from its
-    segmentation mask (via maskUtils.toBbox), matching what write_labels writes
-    to the YOLO .txt training files.
-
-    The aauRainSnow JSON stores float bboxes that can differ from the
-    integer-pixel RLE-derived bbox by up to 208px (IoU < 0.50 for ~5% of GT).
-    COCOeval uses ann['bbox'] for GT matching, so without this alignment the
-    model is scored against different boxes than it was trained on, artificially
-    suppressing AP.
-    """
-    from pycocotools import mask as maskUtils
-
-    for ann in coco.dataset["annotations"]:
-        if not ann.get("segmentation"):
-            continue
-        rle  = coco.annToRLE(ann)
-        x, y, w, h = maskUtils.toBbox(rle).tolist()
-        if w > 0 and h > 0:
-            ann["bbox"] = [x, y, w, h]
-            ann["area"] = float(w * h)
-
-    coco.createIndex()
-
-
-# ---------------------------------------------------------------------------
-# Fold image-ID loader  (unchanged from the original scaffold)
+# Fold image-ID loader
 # ---------------------------------------------------------------------------
 
 def load_fold_image_ids(fold: int) -> list[int]:
@@ -632,18 +587,9 @@ def main() -> None:
 
     n_splits = tr["n_splits"]
 
-    # Load GT annotation sets once; strip degenerate annotations and optionally
-    # realign GT bboxes to match the RLE-derived boxes written to YOLO labels.
+    # Annotation files are already cleaned and RLE-realigned by pre_processing.py.
     thermal_coco = COCO(exp_thermal["dataset_file"])
     rgb_coco     = COCO(exp_rgb["dataset_file"])
-    _remove_degenerate_annotations(thermal_coco)
-    _remove_degenerate_annotations(rgb_coco)
-    if params["inference"]["gt_bbox_source"] == "rle":
-        print("  [gt_bbox] using RLE-derived bboxes (from segmentation masks)")
-        _realign_gt_bboxes_to_rle(thermal_coco)
-        _realign_gt_bboxes_to_rle(rgb_coco)
-    else:
-        print("  [gt_bbox] using original stored bboxes (ann['bbox'] from JSON)")
 
     all_results: list[dict] = []
     print("PARAMS USED:", params["inference"])

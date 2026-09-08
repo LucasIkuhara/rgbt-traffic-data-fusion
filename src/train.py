@@ -125,6 +125,7 @@ def _train_one_model(
     metrics = val_model.val(data=str(yaml_path), split="val", verbose=False)
 
     output_model = Path(tr[output_key])
+    output_model.parent.mkdir(parents=True, exist_ok=True)
     fold_output  = output_model.with_stem(f"{output_model.stem}_fold_{fold}")
     shutil.copy(best_weights, fold_output)
 
