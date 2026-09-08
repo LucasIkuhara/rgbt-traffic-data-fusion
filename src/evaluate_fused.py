@@ -299,6 +299,52 @@ def _run_model_on_images(
     return proj_dets, raw_dets
 
 
+def _f1_from_eval(ev: COCOeval) -> float:
+    """Compute max-F1 at IoU=0.50 from an already-accumulated COCOeval.
+
+    ``ev.eval["precision"]`` has shape [T, R, K, A, M]:
+      T = 10 IoU thresholds (0.50 … 0.95), index 0 → IoU=0.50
+      R = 101 recall points (0.00 … 1.00)
+      K = categories
+      A = area ranges
+      M = max-det thresholds
+
+    We average over categories (K), take area=all (A=0) and the largest
+    max-det slot (M=-1), then find the recall point that maximises F1.
+    Recall values mirror the 101 linearly-spaced points [0, 0.01, …, 1.0].
+    """
+    # precision[0, :, :, 0, -1] → shape [R, K]; -1 means "no detection" slots
+    prec = ev.eval["precision"][0, :, :, 0, -1]   # IoU=0.50, area=all, maxDets=largest
+    prec = prec[prec > -1]                          # remove unset entries
+    if prec.size == 0:
+        return 0.0
+    # Mean precision over categories at each recall point
+    prec_mean = ev.eval["precision"][0, :, :, 0, -1].mean(axis=1)  # shape [R]
+    recall_pts = np.linspace(0.0, 1.0, len(prec_mean))
+    valid = prec_mean > -1
+    if not valid.any():
+        return 0.0
+    p = prec_mean[valid]
+    r = recall_pts[valid]
+    denom = p + r
+    f1 = np.where(denom > 0, 2 * p * r / denom, 0.0)
+    return float(f1.max())
+
+
+def _f1_from_eval_single_cat(ev: COCOeval) -> float:
+    """Same as ``_f1_from_eval`` but for a single-category COCOeval (K=1)."""
+    prec_curve = ev.eval["precision"][0, :, 0, 0, -1]   # shape [R]
+    recall_pts = np.linspace(0.0, 1.0, len(prec_curve))
+    valid = prec_curve > -1
+    if not valid.any():
+        return 0.0
+    p = prec_curve[valid]
+    r = recall_pts[valid]
+    denom = p + r
+    f1 = np.where(denom > 0, 2 * p * r / denom, 0.0)
+    return float(f1.max())
+
+
 def _coco_eval(
     gt_coco: COCO,
     detections: list[CocoDetection],
@@ -308,7 +354,7 @@ def _coco_eval(
     """Run COCOeval on *detections* restricted to *image_ids*."""
     if not detections:
         print(f"  [{label}] No detections — skipping eval.")
-        return {"map50": 0.0, "map50_95": 0.0, "recall": 0.0}
+        return {"map50": 0.0, "map50_95": 0.0, "recall": 0.0, "f1": 0.0}
 
     res    = gt_coco.loadRes(detections)
     ev     = COCOeval(gt_coco, res, "bbox")
@@ -323,7 +369,42 @@ def _coco_eval(
         "map50":    float(ev.stats[1]),   # AP  @ IoU=0.50
         "map50_95": float(ev.stats[0]),   # AP  @ IoU=0.50:0.95
         "recall":   float(ev.stats[8]),   # AR  @ IoU=0.50:0.95, maxDets=1000
+        "f1":       _f1_from_eval(ev),    # max-F1 @ IoU=0.50
     }
+
+
+def _coco_eval_per_class(
+    gt_coco: COCO,
+    detections: list[CocoDetection],
+    image_ids: list[int],
+) -> dict[str, dict[str, float]]:
+    """Return per-category AP metrics keyed by category name.
+
+    For each category we run a separate COCOeval restricted to that category
+    and extract mAP@50, mAP@[0.5:0.95], and max-F1@IoU=0.50.
+    """
+    results: dict[str, dict[str, float]] = {}
+    cat_id_to_name = {c["id"]: c["name"] for c in gt_coco.dataset["categories"]}
+
+    if not detections:
+        return {name: {"map50": 0.0, "map50_95": 0.0, "f1": 0.0} for name in cat_id_to_name.values()}
+
+    res = gt_coco.loadRes(detections)
+
+    for cat_id, cat_name in cat_id_to_name.items():
+        ev = COCOeval(gt_coco, res, "bbox")
+        ev.params.imgIds  = image_ids
+        ev.params.catIds  = [cat_id]
+        ev.params.maxDets = [1, 10, 100, 1000]
+        ev.evaluate()
+        ev.accumulate()
+        results[cat_name] = {
+            "map50":    float(ev.stats[1]),
+            "map50_95": float(ev.stats[0]),
+            "f1":       _f1_from_eval_single_cat(ev),
+        }
+
+    return results
 
 
 def evaluate_fold(
@@ -414,11 +495,23 @@ def evaluate_fold(
         for method in fusion_methods
     }
 
+    pc_thermal = _coco_eval_per_class(thermal_coco, thermal_dets,  image_ids)
+    pc_rgb     = _coco_eval_per_class(thermal_coco, rgb_proj_dets, image_ids)
+    pc_fused   = {
+        method: _coco_eval_per_class(thermal_coco, fused_by_method[method], image_ids)
+        for method in fusion_methods
+    }
+
     return {
-        "fold":    fold,
-        "thermal": m_thermal,
-        "rgb":     m_rgb,
-        "fused":   m_fused,   # dict keyed by method name
+        "fold":           fold,
+        "thermal":        m_thermal,
+        "rgb":            m_rgb,
+        "fused":          m_fused,          # dict keyed by method name
+        "per_class":      {
+            "thermal": pc_thermal,
+            "rgb":     pc_rgb,
+            "fused":   pc_fused,
+        },
     }
 
 
@@ -434,15 +527,15 @@ def _yolo_xywh_to_coco(v: list[float]) -> list[float]:
 def _export_results(all_results: list[dict], path: str = "results.xlsx") -> None:
     """Aggregate fold results into a DataFrame and export to Excel.
 
-    Each row is one configuration (Thermal, RGB→Thermal, or a fusion method).
-    Columns: mAP@50 mean±std, mAP@[0.5:0.95] mean±std, Recall mean±std.
+    Sheet 1 (Overview): one row per configuration, mean±std across folds.
+    Sheet 2 (Per-Class): one row per (configuration, class), mean±std across folds.
     """
     import pandas as pd
 
     fusion_methods = ("wbf", "nms", "soft_nms", "nmw")
-    metrics = ("map50", "map50_95", "recall")
+    metrics = ("map50", "map50_95", "recall", "f1")
 
-    # Collect all configurations
+    # ── Sheet 1: overview ────────────────────────────────────────────────
     configs: list[tuple[str, list[dict]]] = [
         ("Thermal",     [r["thermal"]         for r in all_results]),
         ("RGB→Thermal", [r["rgb"]             for r in all_results]),
@@ -455,13 +548,43 @@ def _export_results(all_results: list[dict], path: str = "results.xlsx") -> None
         row: dict = {"Configuration": name}
         for metric in metrics:
             values = np.array([m[metric] for m in fold_metrics])
-            col_label = {"map50": "mAP@50", "map50_95": "mAP@[0.5:0.95]", "recall": "Recall"}[metric]
+            col_label = {"map50": "mAP@50", "map50_95": "mAP@[0.5:0.95]", "recall": "Recall", "f1": "F1"}[metric]
             row[f"{col_label} Mean"] = round(float(values.mean()), 4)
             row[f"{col_label} Std"]  = round(float(values.std()),  4)
         rows.append(row)
 
-    df = pd.DataFrame(rows)
-    df.to_excel(path, index=False)
+    df_overview = pd.DataFrame(rows)
+
+    # ── Sheet 2: per-class ───────────────────────────────────────────────
+    cat_names = sorted(all_results[0]["per_class"]["thermal"].keys())
+
+    pc_configs: list[tuple[str, list[dict[str, dict[str, float]]]]] = [
+        ("Thermal",     [r["per_class"]["thermal"]         for r in all_results]),
+        ("RGB→Thermal", [r["per_class"]["rgb"]             for r in all_results]),
+    ]
+    for method in fusion_methods:
+        pc_configs.append((
+            f"Fused ({method.upper()})",
+            [r["per_class"]["fused"][method] for r in all_results],
+        ))
+
+    pc_rows = []
+    for name, fold_pc in pc_configs:
+        for cat in cat_names:
+            row = {"Configuration": name, "Class": cat}
+            for metric in ("map50", "map50_95", "f1"):
+                values = np.array([fp[cat][metric] for fp in fold_pc])
+                col_label = {"map50": "mAP@50", "map50_95": "mAP@[0.5:0.95]", "f1": "F1"}[metric]
+                row[f"{col_label} Mean"] = round(float(values.mean()), 4)
+                row[f"{col_label} Std"]  = round(float(values.std()),  4)
+            pc_rows.append(row)
+
+    df_per_class = pd.DataFrame(pc_rows)
+
+    with pd.ExcelWriter(path) as writer:
+        df_overview.to_excel(writer,   sheet_name="Overview",   index=False)
+        df_per_class.to_excel(writer,  sheet_name="Per-Class",  index=False)
+
     print(f"\n  [export] Results written to {path}")
 
 
@@ -533,43 +656,79 @@ def main() -> None:
 
     # Per-modality block (Thermal + RGB)
     print(f"\n\n{'='*60}")
-    print("  SUMMARY — Thermal & RGB  (mAP50  |  mAP50-95)")
+    print("  SUMMARY — Thermal & RGB  (mAP50  |  mAP50-95  |  F1)")
     print(f"{'='*60}")
-    print(f"  {'Fold':>6}  {'Thermal mAP50':>14}  {'Thermal mAP':>11}  {'RGB mAP50':>10}  {'RGB mAP':>8}")
-    print(f"  {'-'*56}")
+    print(f"  {'Fold':>6}  {'Therm mAP50':>12}  {'Therm mAP':>10}  {'Therm F1':>9}  {'RGB mAP50':>10}  {'RGB mAP':>8}  {'RGB F1':>7}")
+    print(f"  {'-'*72}")
     for r in all_results:
         print(
             f"  {r['fold']:>6}  "
-            f"{r['thermal']['map50']:>14.4f}  {r['thermal']['map50_95']:>11.4f}  "
-            f"{r['rgb']['map50']:>10.4f}  {r['rgb']['map50_95']:>8.4f}"
+            f"{r['thermal']['map50']:>12.4f}  {r['thermal']['map50_95']:>10.4f}  {r['thermal']['f1']:>9.4f}  "
+            f"{r['rgb']['map50']:>10.4f}  {r['rgb']['map50_95']:>8.4f}  {r['rgb']['f1']:>7.4f}"
         )
-    print(f"  {'-'*56}")
+    print(f"  {'-'*72}")
     print(
         f"  {'Mean':>6}  "
-        f"{_mean('thermal','map50'):>14.4f}  {_mean('thermal','map50_95'):>11.4f}  "
-        f"{_mean('rgb','map50'):>10.4f}  {_mean('rgb','map50_95'):>8.4f}"
+        f"{_mean('thermal','map50'):>12.4f}  {_mean('thermal','map50_95'):>10.4f}  {_mean('thermal','f1'):>9.4f}  "
+        f"{_mean('rgb','map50'):>10.4f}  {_mean('rgb','map50_95'):>8.4f}  {_mean('rgb','f1'):>7.4f}"
     )
     print(f"{'='*60}")
 
     # Per-fusion-method block
     for method in fusion_methods:
         print(f"\n\n{'='*60}")
-        print(f"  SUMMARY — Fused ({method.upper()})  (mAP50  |  mAP50-95)")
+        print(f"  SUMMARY — Fused ({method.upper()})  (mAP50  |  mAP50-95  |  F1)")
         print(f"{'='*60}")
-        print(f"  {'Fold':>6}  {'mAP50':>10}  {'mAP50-95':>10}")
-        print(f"  {'-'*30}")
+        print(f"  {'Fold':>6}  {'mAP50':>10}  {'mAP50-95':>10}  {'F1':>8}")
+        print(f"  {'-'*40}")
         for r in all_results:
             print(
                 f"  {r['fold']:>6}  "
                 f"{r['fused'][method]['map50']:>10.4f}  "
-                f"{r['fused'][method]['map50_95']:>10.4f}"
+                f"{r['fused'][method]['map50_95']:>10.4f}  "
+                f"{r['fused'][method]['f1']:>8.4f}"
             )
-        print(f"  {'-'*30}")
+        print(f"  {'-'*40}")
         print(
             f"  {'Mean':>6}  "
             f"{_mean('fused','map50',method):>10.4f}  "
-            f"{_mean('fused','map50_95',method):>10.4f}"
+            f"{_mean('fused','map50_95',method):>10.4f}  "
+            f"{_mean('fused','f1',method):>8.4f}"
         )
+        print(f"{'='*60}")
+    print()
+
+    # ── Per-class summary ────────────────────────────────────────────────
+    cat_names = sorted(all_results[0]["per_class"]["thermal"].keys())
+    col_w = max(len(c) for c in cat_names) + 2
+
+    pc_configs_print: list[tuple[str, list[dict[str, dict[str, float]]]]] = [
+        ("Thermal",     [r["per_class"]["thermal"]         for r in all_results]),
+        ("RGB→Thermal", [r["per_class"]["rgb"]             for r in all_results]),
+    ]
+    for method in fusion_methods:
+        pc_configs_print.append((
+            f"Fused ({method.upper()})",
+            [r["per_class"]["fused"][method] for r in all_results],
+        ))
+
+    for cfg_name, fold_pc in pc_configs_print:
+        print(f"\n\n{'='*60}")
+        print(f"  PER-CLASS — {cfg_name}")
+        print(f"{'='*60}")
+        header = f"  {'Class':<{col_w}}  {'mAP@50 Mean':>12}  {'mAP@50 Std':>10}  {'mAP@0.5:95 Mean':>15}  {'mAP@0.5:95 Std':>14}  {'F1 Mean':>8}  {'F1 Std':>7}"
+        print(header)
+        print(f"  {'-'*(len(header)-2)}")
+        for cat in cat_names:
+            m50  = np.array([fp[cat]["map50"]    for fp in fold_pc])
+            m595 = np.array([fp[cat]["map50_95"] for fp in fold_pc])
+            f1   = np.array([fp[cat]["f1"]       for fp in fold_pc])
+            print(
+                f"  {cat:<{col_w}}  "
+                f"{m50.mean():>12.4f}  {m50.std():>10.4f}  "
+                f"{m595.mean():>15.4f}  {m595.std():>14.4f}  "
+                f"{f1.mean():>8.4f}  {f1.std():>7.4f}"
+            )
         print(f"{'='*60}")
     print()
 
