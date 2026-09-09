@@ -1,6 +1,6 @@
 # Install Python and depedencies
 install:
-    poetry python install 3.12
+    poetry python install -r 3.12
     poetry env use 3.12
     poetry install
 
