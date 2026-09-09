@@ -13,6 +13,11 @@ Reproducing multi-modal object detection for traffic scenes by fusing RGB and th
 
 ## Setup
 
+In container images, you might need to install:
+``bash
+apt-get install -y libxcb1 libgl1
+```
+
 ```bash
 # 1. Install Python dependencies into an isolated virtual environment
 poetry install
