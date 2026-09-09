@@ -299,7 +299,7 @@ def _export_results(all_results: list[dict], path: str = "results.xlsx") -> None
     for name, fold_pc in pc_configs:
         for cat in cat_names:
             row = {"Configuration": name, "Class": cat,
-                   "Instances": fold_pc[0][cat]["instances"]}
+                   "Instances": sum(fp[cat]["instances"] for fp in fold_pc)}
             for metric in ("map50", "map50_95", "f1"):
                 values = np.array([fp[cat][metric] for fp in fold_pc])
                 col = pc_col_labels[metric]
@@ -449,8 +449,7 @@ def main() -> None:
             m50  = np.array([fp[cat]["map50"]    for fp in fold_pc])
             m595 = np.array([fp[cat]["map50_95"] for fp in fold_pc])
             f1   = np.array([fp[cat]["f1"]       for fp in fold_pc])
-            # instance count is identical across folds for the same config; take the first fold
-            instances = fold_pc[0][cat]["instances"]
+            instances = sum(fp[cat]["instances"] for fp in fold_pc)
             print(
                 f"  {cat:<{col_w}}  "
                 f"{instances:>9}  "

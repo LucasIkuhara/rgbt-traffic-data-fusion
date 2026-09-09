@@ -23,7 +23,7 @@ output_thermal_ann = "aau-rainsnow/aauRainSnow-thermal-cleaned.json"
 
 # Remove annotations whose category name is in this list.
 # All other annotations and category entries are kept.
-filter_categories = ["bicycle", "person"]
+filter_categories = #["bicycle", "person", "motorbike"]
 
 [inference]
 conf_rgb     = 0.001
