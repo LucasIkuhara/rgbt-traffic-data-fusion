@@ -1,3 +1,9 @@
+# Install Python and depedencies
+install:
+    poetry python install 3.12
+    poetry env use 3.12
+    poetry install
+
 # Downloads and extracts the dataset (AAU RainSnow)
 dataset:
     curl -L -o aau-rainsnow.zip \
@@ -21,7 +27,7 @@ eval:
     poetry run python -m src.evaluate_fused
 
 # Reproduce entire experiment
-run: dataset get-base-weights pre-process train eval
+run: install dataset get-base-weights pre-process train eval
 
 visualize:
     poetry run python -m src.visualize
