@@ -117,7 +117,7 @@ def coco_eval_per_class(
 
     if not detections:
         return {
-            name: {"map50": 0.0, "map50_95": 0.0, "f1": 0.0,
+            name: {"map50": 0.0, "map50_95": 0.0, "recall": 0.0, "f1": 0.0,
                    "instances": instance_counts[cat_id]}
             for cat_id, name in cat_id_to_name.items()
         }
@@ -140,9 +140,15 @@ def coco_eval_per_class(
         valid50  = prec[0][prec[0] > -1]
         map50    = float(np.mean(valid50))   if valid50.size  > 0 else 0.0
 
+        # recall shape: [T, K, A, M] → IoU=0.50:0.95, K=1, area=all, maxDets=largest
+        recall_arr = ev.eval["recall"][:, 0, 0, -1]
+        valid_r = recall_arr[recall_arr > -1]
+        recall = float(np.mean(valid_r)) if valid_r.size > 0 else 0.0
+
         results[cat_name] = {
             "map50":    map50,
             "map50_95": map50_95,
+            "recall":   recall,
             "f1":       f1_from_eval_single_cat(ev),
             "instances": instance_counts[cat_id],
         }

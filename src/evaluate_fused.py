@@ -252,66 +252,65 @@ def evaluate_fold(
 def _export_results(all_results: list[dict], path: str = "results.xlsx") -> None:
     """Aggregate fold results into a DataFrame and export to Excel.
 
-    Sheet 1 (Overview): one row per configuration, mean±std across folds.
-    Sheet 2 (Per-Class): one row per (configuration, class), mean±std across folds.
+    Single sheet with one row per (configuration, class) — 'Overall' used for
+    the aggregate row — containing all metrics: mAP@50, mAP@[0.5:0.95], Recall, F1.
     """
     import pandas as pd
 
     fusion_methods = ("wbf", "nms", "soft_nms", "nmw")
     metrics = ("map50", "map50_95", "recall", "f1")
+    col_labels = {"map50": "mAP@50", "map50_95": "mAP@[0.5:0.95]", "recall": "Recall", "f1": "F1"}
 
-    # ── Sheet 1: overview ────────────────────────────────────────────────
-    configs: list[tuple[str, list[dict]]] = [
-        ("Thermal",     [r["thermal"]     for r in all_results]),
-        ("RGB→Thermal", [r["rgb"]         for r in all_results]),
+    configs: list[tuple[str, list[dict], list[dict[str, dict[str, float]]]]] = [
+        (
+            "Thermal",
+            [r["thermal"] for r in all_results],
+            [r["per_class"]["thermal"] for r in all_results],
+        ),
+        (
+            "RGB→Thermal",
+            [r["rgb"] for r in all_results],
+            [r["per_class"]["rgb"] for r in all_results],
+        ),
     ]
     for method in fusion_methods:
-        configs.append((f"Fused ({method.upper()})", [r["fused"][method] for r in all_results]))
+        configs.append((
+            f"Fused ({method.upper()})",
+            [r["fused"][method] for r in all_results],
+            [r["per_class"]["fused"][method] for r in all_results],
+        ))
+
+    cat_names = sorted(all_results[0]["per_class"]["thermal"].keys())
 
     rows = []
-    col_labels = {"map50": "mAP@50", "map50_95": "mAP@[0.5:0.95]", "recall": "Recall", "f1": "F1"}
-    for name, fold_metrics in configs:
-        row: dict = {"Configuration": name}
+    for name, fold_overall, fold_pc in configs:
+        # Overall row (aggregated across all classes)
+        row: dict = {"Configuration": name, "Class": "Overall", "Instances": "—"}
         for metric in metrics:
-            values = np.array([m[metric] for m in fold_metrics])
+            values = np.array([m[metric] for m in fold_overall])
             col = col_labels[metric]
             row[f"{col} Mean"] = round(float(values.mean()), 4)
             row[f"{col} Std"]  = round(float(values.std()),  4)
         rows.append(row)
 
-    df_overview = pd.DataFrame(rows)
-
-    # ── Sheet 2: per-class ───────────────────────────────────────────────
-    cat_names = sorted(all_results[0]["per_class"]["thermal"].keys())
-
-    pc_configs: list[tuple[str, list[dict[str, dict[str, float]]]]] = [
-        ("Thermal",     [r["per_class"]["thermal"]     for r in all_results]),
-        ("RGB→Thermal", [r["per_class"]["rgb"]         for r in all_results]),
-    ]
-    for method in fusion_methods:
-        pc_configs.append((
-            f"Fused ({method.upper()})",
-            [r["per_class"]["fused"][method] for r in all_results],
-        ))
-
-    pc_col_labels = {"map50": "mAP@50", "map50_95": "mAP@[0.5:0.95]", "f1": "F1"}
-    pc_rows = []
-    for name, fold_pc in pc_configs:
+        # Per-class rows
         for cat in cat_names:
-            row = {"Configuration": name, "Class": cat,
-                   "Instances": sum(fp[cat]["instances"] for fp in fold_pc)}
-            for metric in ("map50", "map50_95", "f1"):
+            row = {
+                "Configuration": name,
+                "Class": cat,
+                "Instances": sum(fp[cat]["instances"] for fp in fold_pc),
+            }
+            for metric in metrics:
                 values = np.array([fp[cat][metric] for fp in fold_pc])
-                col = pc_col_labels[metric]
+                col = col_labels[metric]
                 row[f"{col} Mean"] = round(float(values.mean()), 4)
                 row[f"{col} Std"]  = round(float(values.std()),  4)
-            pc_rows.append(row)
+            rows.append(row)
 
-    df_per_class = pd.DataFrame(pc_rows)
+    df = pd.DataFrame(rows)
 
     with pd.ExcelWriter(path) as writer:
-        df_overview.to_excel(writer,  sheet_name="Overview",  index=False)
-        df_per_class.to_excel(writer, sheet_name="Per-Class", index=False)
+        df.to_excel(writer, sheet_name="Results", index=False)
 
     print(f"\n  [export] Results written to {path}")
 
