@@ -4,6 +4,7 @@ import shutil
 from pathlib import Path
 
 import numpy as np
+import torch
 from pycocotools.coco import COCO
 from pycocotools import mask as maskUtils
 from sklearn.model_selection import KFold, train_test_split
@@ -62,6 +63,42 @@ def write_labels(coco: COCO, img_ids: list[int], dataset_path: Path,
     images_txt.write_text("\n".join(image_lines) + "\n")
 
 
+def inverse_frequency_weights(
+    coco: COCO, img_ids: list[int], class_map: dict[int, int], n_classes: int
+) -> list[float]:
+    """Inverse-frequency class weights for the training split.
+
+    Weight for class i = total / (n_classes * count_i), normalised so the
+    mean weight equals 1.0.  Classes with zero instances get weight 1.0.
+    """
+    image_id_set = set(img_ids)
+    counts = np.zeros(n_classes, dtype=np.float64)
+    for ann in coco.dataset.get("annotations", []):
+        if ann["image_id"] not in image_id_set:
+            continue
+        yolo_cls = class_map.get(ann["category_id"])
+        if yolo_cls is not None:
+            counts[yolo_cls] += 1
+
+    total = counts.sum()
+    weights = np.where(counts > 0, total / (n_classes * counts), 1.0)
+    weights /= weights.mean()
+    return weights.tolist()
+
+
+def make_weighted_trainer(cls_weights: list[float]):
+    """Return a DetectionTrainer subclass that injects per-class BCE weights."""
+    from ultralytics.models.yolo.detect import DetectionTrainer
+
+    class WeightedTrainer(DetectionTrainer):
+        def set_model_attributes(self):
+            super().set_model_attributes()
+            pw = torch.tensor(cls_weights, device=next(self.model.parameters()).device)
+            self.model.model[-1].cls_pw = pw
+
+    return WeightedTrainer
+
+
 def write_yaml(fold_dir: Path, train_txt: Path, val_txt: Path,
                model_names: dict[int, str]) -> Path:
     yaml_path = fold_dir / "dataset.yaml"
@@ -108,6 +145,12 @@ def _train_one_model(
     (fold_dir / modality).mkdir(parents=True, exist_ok=True)
     yaml_path = write_yaml(fold_dir / modality, train_txt, val_txt, base_model.names)
 
+    cls_weights = inverse_frequency_weights(
+        coco_obj, img_ids[train_idx].tolist(), class_map, len(base_model.names)
+    )
+    print(f"  [{modality}] class_weights (inv-freq): "
+          + ", ".join(f"{base_model.names[i]}={w:.3f}" for i, w in enumerate(cls_weights)))
+
     model = YOLO(tr[input_key])
     train_result = model.train(
         data=str(yaml_path),
@@ -115,9 +158,11 @@ def _train_one_model(
         imgsz=tr["imgsz"],
         batch=tr["batch"],
         freeze=tr["freeze"],
+        trainer=make_weighted_trainer(cls_weights),
         project=str((fold_dir / modality).resolve()),
         name="train",
         exist_ok=True,
+        # device=[0, 1]
     )
 
     best_weights = Path(train_result.save_dir) / "weights" / "best.pt"
