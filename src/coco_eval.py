@@ -24,12 +24,14 @@ def f1_from_eval(ev: COCOeval) -> float:
     Averages precision over categories (K), takes area=all (A=0) and the
     largest max-det slot (M=-1), then finds the recall point that maximises F1.
     """
-    prec = ev.eval["precision"][0, :, :, 0, -1]   # IoU=0.50, area=all, maxDets=largest
+    prec = ev.eval["precision"][0, :, :, 0, -1]   # IoU=0.50, area=all, maxDets=largest; shape [R, K]
     if (prec > -1).sum() == 0:
         return 0.0
-    prec_mean = prec.mean(axis=1)                  # shape [R]
+    # Average over categories, ignoring -1 sentinels (pycocotools "no data" marker).
+    masked = np.where(prec > -1, prec, np.nan)
+    prec_mean = np.nanmean(masked, axis=1)         # shape [R]; NaN where every cat is missing
     recall_pts = np.linspace(0.0, 1.0, len(prec_mean))
-    valid = prec_mean > -1
+    valid = ~np.isnan(prec_mean)
     if not valid.any():
         return 0.0
     p = prec_mean[valid]
