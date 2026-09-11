@@ -9,7 +9,8 @@ import matplotlib.axes as maxes
 import matplotlib.patches as patches
 from pycocotools.coco import COCO
 
-from src.calibration import DATASET_PATH
+from src.bbox_fusion import CocoDetection, fuse_detections
+from src.calibration import DATASET_PATH, IMG_W, IMG_H, load_calib, transform_bbox_rgb_to_thermal, transform_bbox_thermal_to_rgb
 from src.masks import apply_mask
 from src.models import get_thermal_detector, get_rgb_detector
 from src.params import params
@@ -78,9 +79,9 @@ def _predict(model, img: np.ndarray, gt_cat_by_name: dict[str, int]) -> list[dic
 # ---------------------------------------------------------------------------
 
 def visualize(image_id: int) -> None:
-    """Show a 2×2 figure for *image_id*:
-        [thermal GT | thermal predictions]
-        [RGB GT     | RGB predictions    ]
+    """Show a 2×3 figure for *image_id*:
+        [thermal GT | thermal predictions | NMW fused (thermal space)]
+        [RGB GT     | RGB predictions     | NMW fused (RGB space)    ]
     """
     exp_thermal = params["experiments"]["thermal"]
     exp_rgb     = params["experiments"]["rgb"]
@@ -113,14 +114,34 @@ def visualize(image_id: int) -> None:
     thermal_pred = _predict(thermal_model, thermal_img, thermal_cat_by_name)
     rgb_pred     = _predict(rgb_model,     rgb_img,     rgb_cat_by_name)
 
-    # ── Plot ──────────────────────────────────────────────────────────────
-    fig, axes = plt.subplots(2, 2, figsize=(16, 10))
-    fig.suptitle(
-        f"image_id={image_id}  |  thermal: {thermal_fname}  |  rgb: {rgb_fname}",
-        fontsize=9,
+    # ── NMW fusion (RGB projected to thermal space) ───────────────────────
+    calib = load_calib(thermal_fname)   # thermal_fname encodes scene/clip
+    inf   = params["inference"]
+
+    thermal_dets: list[CocoDetection] = [
+        CocoDetection(image_id=image_id, category_id=d["category_id"],
+                      bbox=d["bbox"], score=d["score"])
+        for d in thermal_pred
+    ]
+    rgb_proj_dets: list[CocoDetection] = [
+        CocoDetection(image_id=image_id, category_id=d["category_id"],
+                      bbox=transform_bbox_rgb_to_thermal(d["bbox"], calib),
+                      score=d["score"])
+        for d in rgb_pred
+    ]
+    fused_dets = fuse_detections(
+        rgb_detections=rgb_proj_dets,
+        thermal_detections=thermal_dets,
+        img_w=IMG_W,
+        img_h=IMG_H,
+        iou_thr=inf["fusion_iou_thr"],
+        method="nmw",
     )
 
-    (ax_t_gt, ax_t_pred), (ax_r_gt, ax_r_pred) = axes
+    # ── Plot ──────────────────────────────────────────────────────────────
+    fig, axes = plt.subplots(2, 3, figsize=(22, 10))
+
+    (ax_t_gt, ax_t_pred, ax_t_fused), (ax_r_gt, ax_r_pred, ax_r_fused) = axes
 
     ax_t_gt.imshow(thermal_img)
     ax_t_gt.set_title("Thermal — Ground Truth")
@@ -130,7 +151,12 @@ def visualize(image_id: int) -> None:
     ax_t_pred.imshow(thermal_img)
     ax_t_pred.set_title("Thermal — Predictions")
     ax_t_pred.axis("off")
-    _draw_boxes(ax_t_pred, thermal_pred, thermal_coco, color="red")
+    _draw_boxes(ax_t_pred, thermal_pred, thermal_coco, color="deepskyblue")
+
+    ax_t_fused.imshow(thermal_img)
+    ax_t_fused.set_title("Fused NMW (thermal space)")
+    ax_t_fused.axis("off")
+    _draw_boxes(ax_t_fused, fused_dets, thermal_coco, color="red")  # type: ignore[arg-type]
 
     ax_r_gt.imshow(rgb_img)
     ax_r_gt.set_title("RGB — Ground Truth")
@@ -140,7 +166,16 @@ def visualize(image_id: int) -> None:
     ax_r_pred.imshow(rgb_img)
     ax_r_pred.set_title("RGB — Predictions")
     ax_r_pred.axis("off")
-    _draw_boxes(ax_r_pred, rgb_pred, rgb_coco, color="red")
+    _draw_boxes(ax_r_pred, rgb_pred, rgb_coco, color="deepskyblue")
+
+    fused_dets_rgb: list[dict] = [
+        {**d, "bbox": transform_bbox_thermal_to_rgb(d["bbox"], calib)}
+        for d in fused_dets
+    ]
+    ax_r_fused.imshow(rgb_img)
+    ax_r_fused.set_title("Fused NMW (RGB space)")
+    ax_r_fused.axis("off")
+    _draw_boxes(ax_r_fused, fused_dets_rgb, thermal_coco, color="red")
 
     plt.tight_layout()
     plt.subplots_adjust(wspace=0)

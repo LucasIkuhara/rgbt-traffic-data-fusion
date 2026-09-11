@@ -90,6 +90,49 @@ def register_points_rgb_to_thermal(
     return distorted.reshape(-1, 2)  # (N, 2)
 
 
+def register_points_thermal_to_rgb(
+    points: np.ndarray,   # (N, 2) float32
+    calib: dict,
+) -> np.ndarray:
+    """Project points from thermal (cam2) into RGB (cam1) space.
+
+    Inverse of register_points_rgb_to_thermal:
+      1. Undistort with cam2 intrinsics
+      2. Apply homCam2Cam1
+      3. Re-distort with cam1 intrinsics
+    """
+    pts = points.astype(np.float64).reshape(-1, 1, 2)
+
+    # 1. Undistort
+    undist = cv2.undistortPoints(
+        pts,
+        calib["cam2CamMat"],
+        calib["cam2DistCoeff"],
+        P=calib["cam2CamMat"],
+    )
+
+    # 2. Homography
+    proj = cv2.perspectiveTransform(undist, calib["homCam2Cam1"])  # (N,1,2)
+
+    # 3. Re-distort with cam1 intrinsics
+    K1 = calib["cam1CamMat"]
+    D1 = calib["cam1DistCoeff"]
+    normalised = []
+    for pt in proj[:, 0, :]:
+        nx = (pt[0] - K1[0, 2]) / K1[0, 0]
+        ny = (pt[1] - K1[1, 2]) / K1[1, 1]
+        normalised.append([nx, ny, 1.0])
+
+    distorted, _ = cv2.projectPoints(
+        np.array(normalised, dtype=np.float32).reshape(-1, 1, 3),
+        np.zeros(3, dtype=np.float32),
+        np.zeros(3, dtype=np.float32),
+        K1,
+        D1,
+    )
+    return distorted.reshape(-1, 2)  # (N, 2)
+
+
 # ---------------------------------------------------------------------------
 # Bounding-box projection
 # ---------------------------------------------------------------------------
@@ -112,6 +155,33 @@ def transform_bbox_rgb_to_thermal(
     ], dtype=np.float32)
 
     projected = register_points_rgb_to_thermal(corners, calib)
+
+    x1 = float(np.clip(projected[:, 0].min(), 0, IMG_W))
+    y1 = float(np.clip(projected[:, 1].min(), 0, IMG_H))
+    x2 = float(np.clip(projected[:, 0].max(), 0, IMG_W))
+    y2 = float(np.clip(projected[:, 1].max(), 0, IMG_H))
+
+    return [x1, y1, x2 - x1, y2 - y1]
+
+
+def transform_bbox_thermal_to_rgb(
+    bbox: list[float],  # COCO [x, y, w, h] in thermal pixel space
+    calib: dict,
+) -> list[float]:
+    """Project a COCO bbox from thermal space to RGB space.
+
+    Projects all four corners, takes the axis-aligned bounding box of the
+    result, and clamps to the image bounds.
+    """
+    x, y, w, h = bbox
+    corners = np.array([
+        [x,     y    ],
+        [x + w, y    ],
+        [x + w, y + h],
+        [x,     y + h],
+    ], dtype=np.float32)
+
+    projected = register_points_thermal_to_rgb(corners, calib)
 
     x1 = float(np.clip(projected[:, 0].min(), 0, IMG_W))
     y1 = float(np.clip(projected[:, 1].min(), 0, IMG_H))
