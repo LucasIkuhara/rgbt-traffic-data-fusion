@@ -1,15 +1,41 @@
+from __future__ import annotations
+
+from typing import Sequence
+
 import numpy as np
 import skimage.io as io
 import matplotlib.pyplot as plt
 import matplotlib.axes as maxes
 import matplotlib.patches as patches
-from pycocotools import coco as cocolib
-from src.models import MODELS
+from pycocotools.coco import COCO
+
+from src.calibration import DATASET_PATH
+from src.masks import apply_mask
+from src.models import get_thermal_detector, get_rgb_detector
 from src.params import params
 from src.predict import xywh_yolo_to_coco
 
+# Same name remapping used in evaluate_fused.py
+_YOLO_TO_COCO_NAME: dict[str, str] = {
+    "motorcycle":   "motorbike",
+    "airplane":     "aeroplane",
+    "couch":        "sofa",
+    "potted plant": "pottedplant",
+    "dining table": "diningtable",
+    "tv":           "tvmonitor",
+}
 
-def draw_boxes(ax: maxes.Axes, anns: list[dict], coco_obj: cocolib.COCO, color: str, label_prefix: str = "") -> None:
+
+# ---------------------------------------------------------------------------
+# Drawing helpers
+# ---------------------------------------------------------------------------
+
+def _draw_boxes(
+    ax: maxes.Axes,
+    anns: Sequence[dict],
+    coco_obj: COCO,
+    color: str,
+) -> None:
     for ann in anns:
         x, y, w, h = ann["bbox"]
         ax.add_patch(
@@ -22,80 +48,113 @@ def draw_boxes(ax: maxes.Axes, anns: list[dict], coco_obj: cocolib.COCO, color: 
         ax.text(
             x,
             y - 4,
-            f"{label_prefix}{cat_name}{score}",
+            f"{cat_name}{score}",
             color=color,
             fontsize=7,
             bbox=dict(facecolor="black", alpha=0.4, pad=1, edgecolor="none"),
         )
 
 
-def plot(img: np.ndarray, gt_anns: list[dict], pred_anns: list[dict], coco_obj: cocolib.COCO, title: str, pred_label: str) -> None:
-    fig, (ax_gt, ax_pred) = plt.subplots(1, 2, figsize=(14, 6))
-    fig.suptitle(title, fontsize=9)
+def _predict(model, img: np.ndarray, gt_cat_by_name: dict[str, int]) -> list[dict]:
+    """Run *model* on *img* and return predictions as COCO-style annotation dicts."""
+    prediction = model.predict(img, verbose=False, augment=True)[0]
+    anns: list[dict] = []
+    for box in prediction.boxes:
+        cls_name  = model.names[int(box.cls[0])]
+        coco_name = _YOLO_TO_COCO_NAME.get(cls_name, cls_name)
+        cat_id    = gt_cat_by_name.get(coco_name)  # type: ignore[arg-type]
+        if cat_id is None:
+            continue
+        anns.append({
+            "bbox":        xywh_yolo_to_coco(box.xywh.tolist()[0]),
+            "category_id": cat_id,
+            "score":       float(box.conf[0]),
+        })
+    return anns
 
-    ax_gt.imshow(img)
-    ax_gt.set_title("Ground truth")
-    ax_gt.axis("off")
-    draw_boxes(ax_gt, gt_anns, coco_obj, color="lime")
 
-    ax_pred.imshow(img)
-    ax_pred.set_title(f"Predictions  ({pred_label})")
-    ax_pred.axis("off")
-    draw_boxes(ax_pred, pred_anns, coco_obj, color="red")
+# ---------------------------------------------------------------------------
+# Main visualisation
+# ---------------------------------------------------------------------------
+
+def visualize(image_id: int) -> None:
+    """Show a 2×2 figure for *image_id*:
+        [thermal GT | thermal predictions]
+        [RGB GT     | RGB predictions    ]
+    """
+    exp_thermal = params["experiments"]["thermal"]
+    exp_rgb     = params["experiments"]["rgb"]
+
+    thermal_coco = COCO(exp_thermal["dataset_file"])
+    rgb_coco     = COCO(exp_rgb["dataset_file"])
+
+    thermal_model = get_thermal_detector()
+    rgb_model     = get_rgb_detector()
+
+    # ── Load images ──────────────────────────────────────────────────────
+    thermal_meta  = thermal_coco.imgs[image_id]
+    thermal_fname = thermal_meta["file_name"]
+    thermal_img   = io.imread(f"{exp_thermal['dataset_base_dir']}/{thermal_fname}")
+    thermal_img   = apply_mask(thermal_img, DATASET_PATH, thermal_fname, thermal=True)
+
+    rgb_meta  = rgb_coco.imgs[image_id]
+    rgb_fname = rgb_meta["file_name"]
+    rgb_img   = io.imread(f"{exp_rgb['dataset_base_dir']}/{rgb_fname}")
+    rgb_img   = apply_mask(rgb_img, DATASET_PATH, rgb_fname, thermal=False)
+
+    # ── Ground truth ─────────────────────────────────────────────────────
+    thermal_gt: list[dict] = thermal_coco.loadAnns(thermal_coco.getAnnIds(imgIds=[image_id]))  # type: ignore[assignment]
+    rgb_gt: list[dict]     = rgb_coco.loadAnns(rgb_coco.getAnnIds(imgIds=[image_id]))          # type: ignore[assignment]
+
+    # ── Predictions ───────────────────────────────────────────────────────
+    thermal_cat_by_name = {c["name"]: c["id"] for c in thermal_coco.dataset["categories"]}
+    rgb_cat_by_name     = {c["name"]: c["id"] for c in rgb_coco.dataset["categories"]}
+
+    thermal_pred = _predict(thermal_model, thermal_img, thermal_cat_by_name)
+    rgb_pred     = _predict(rgb_model,     rgb_img,     rgb_cat_by_name)
+
+    # ── Plot ──────────────────────────────────────────────────────────────
+    fig, axes = plt.subplots(2, 2, figsize=(16, 10))
+    fig.suptitle(
+        f"image_id={image_id}  |  thermal: {thermal_fname}  |  rgb: {rgb_fname}",
+        fontsize=9,
+    )
+
+    (ax_t_gt, ax_t_pred), (ax_r_gt, ax_r_pred) = axes
+
+    ax_t_gt.imshow(thermal_img)
+    ax_t_gt.set_title("Thermal — Ground Truth")
+    ax_t_gt.axis("off")
+    _draw_boxes(ax_t_gt, thermal_gt, thermal_coco, color="lime")
+
+    ax_t_pred.imshow(thermal_img)
+    ax_t_pred.set_title("Thermal — Predictions")
+    ax_t_pred.axis("off")
+    _draw_boxes(ax_t_pred, thermal_pred, thermal_coco, color="red")
+
+    ax_r_gt.imshow(rgb_img)
+    ax_r_gt.set_title("RGB — Ground Truth")
+    ax_r_gt.axis("off")
+    _draw_boxes(ax_r_gt, rgb_gt, rgb_coco, color="lime")
+
+    ax_r_pred.imshow(rgb_img)
+    ax_r_pred.set_title("RGB — Predictions")
+    ax_r_pred.axis("off")
+    _draw_boxes(ax_r_pred, rgb_pred, rgb_coco, color="red")
 
     plt.tight_layout()
+    plt.subplots_adjust(wspace=0)
     plt.show()
 
 
-def visualize(exp_id: str, image_id: int) -> None:
-    experiment = params["experiments"][exp_id]
-    dataset_base_dir = experiment["dataset_base_dir"]
-    model = MODELS[experiment["model_name"]]
-
-    gt_coco = cocolib.COCO(experiment["dataset_file"])
-
-    # Load and run prediction on the chosen image
-    img_meta = gt_coco.imgs[image_id]
-    img = io.imread(f"{dataset_base_dir}/{img_meta['file_name']}")
-    prediction = model.predict(img, verbose=False)[0]
-
-    gt_cat_by_name = {c["name"]: c["id"] for c in gt_coco.dataset["categories"]}
-
-    # Build predicted annotations in COCO format for drawing
-    pred_anns = []
-    for box in prediction.boxes:
-        cls_name = model.names[int(box.cls[0])]
-        cat_id = gt_cat_by_name.get(cls_name)
-        if cat_id is None:
-            continue
-        pred_anns.append(
-            {
-                "bbox": xywh_yolo_to_coco(box.xywh.tolist()[0]),
-                "category_id": cat_id,
-                "score": float(box.conf[0]),
-            }
-        )
-
-    gt_anns = gt_coco.loadAnns(gt_coco.getAnnIds(imgIds=[image_id]))
-
-    plot(
-        img,
-        gt_anns,
-        pred_anns,
-        gt_coco,
-        title=f"[{exp_id}] image_id={image_id}  —  {img_meta['file_name']}",
-        pred_label=experiment["model_name"],
-    )
-
+# ---------------------------------------------------------------------------
+# CLI entry point
+# ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
-    exp_ids = list(params["experiments"].keys())
-    print(f"Available experiments: {exp_ids}")
-    exp_id = input("Experiment: ").strip()
-
-    gt_coco = cocolib.COCO(params["experiments"][exp_id]["dataset_file"])
-    print(f"Image IDs range: 0 - {max(gt_coco.imgs)}")
+    thermal_coco = COCO(params["experiments"]["thermal"]["dataset_file"])
+    print(f"Available image IDs: 0 – {max(thermal_coco.imgs)}")
 
     while True:
         image_id = int(input("Image ID: ").strip())
-        visualize(exp_id, image_id)
+        visualize(image_id)

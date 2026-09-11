@@ -13,3 +13,5 @@ dataset
 **/*.pt
 runs
 src/.env
+results/
+*.tar.gz

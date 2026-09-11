@@ -29,5 +29,5 @@ eval:
 # Reproduce entire experiment
 run: install dataset get-base-weights pre-process train eval
 
-visualize:
+viz:
     poetry run python -m src.visualize
